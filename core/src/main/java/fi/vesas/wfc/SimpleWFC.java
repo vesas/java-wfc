@@ -1,4 +1,4 @@
-package com.vesas.wfc;
+package fi.vesas.wfc;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -52,11 +52,6 @@ public class SimpleWFC {
         public DIR rotateCW(int times) {
             int newOrd = (this.ordinal() + times) % 4;
             return DIR.values()[newOrd];
-        }
-
-        public DIR fromBitMask(int mask) {
-            if (mask == 0) return this;
-            return DIR.values()[(this.ordinal() + Integer.numberOfTrailingZeros(mask)) % 4];
         }
 
         public DIR opposite() {

@@ -1,7 +1,9 @@
-package com.vesas.wfc;
+package fi.vesas.wfc;
 
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration;
+
+import fi.vesas.wfc.MyGdxGame;
 
 public class DesktopLauncher {
 

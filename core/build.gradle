@@ -2,15 +2,10 @@ plugins {
     id 'java-library'
 }
 
-sourceCompatibility = 21
-[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
-
-/*
-sourceSets {
-    main.java.srcDirs = [ "src/" ]
-    test.java.srcDirs = [ "src/test/" ]  
+java {
+    sourceCompatibility = 21
+    [compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
 }
-*/
 
 repositories {
     mavenCentral()
@@ -19,11 +14,11 @@ repositories {
 dependencies {
     api "com.badlogicgames.gdx:gdx:$gdxVersion"
 
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
-    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.13.0-M2'
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
-tasks.named('test') {
+test {
     useJUnitPlatform()
 }
 

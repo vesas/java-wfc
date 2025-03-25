@@ -14,7 +14,7 @@
  */
 //Note, the above license and copyright applies to this file only.
 
-package com.vesas.wfc;
+package fi.vesas.wfc;
 
 import org.lwjgl.system.macosx.LibC;
 

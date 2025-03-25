@@ -1,8 +1,9 @@
-package com.vesas.wfc;
+package fi.vesas.wfc;
 
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.InputAdapter;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -10,8 +11,9 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.utils.ScreenUtils;
-import com.vesas.wfc.SimpleWFC.Constraints;
-import com.vesas.wfc.SimpleWFC.DIR;
+
+import fi.vesas.wfc.SimpleWFC.Constraints;
+import fi.vesas.wfc.SimpleWFC.DIR;
 
 public class MyGdxGame extends ApplicationAdapter {
 
@@ -75,7 +77,7 @@ public class MyGdxGame extends ApplicationAdapter {
 		}
 
 		wfc = new SimpleWFC(GRID_W,GRID_H, tileCount, emptyAllowed, rotationsAllowed);
-        wfc.setSeed(29);
+        wfc.setSeed(229);
 
 		wfc.setTilingVertical(true);
 		wfc.setTilingHorizontal(true);
@@ -216,7 +218,14 @@ public class MyGdxGame extends ApplicationAdapter {
 								s.setOriginCenter();
 								s.setRotation(-j * 90);
 								s.setPosition(x*TILE_W,y*TILE_H);
-								s.draw(batch);
+								// batch.setBlendFunction(GL20.GL_DST_COLOR, GL20.GL_ZERO);
+								// batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+                                // s.draw(batch);
+								batch.setBlendFunction(GL20.GL_CONSTANT_COLOR, GL20.GL_ONE_MINUS_SRC_ALPHA);
+                                // batch.setBlendColor(0.5f, 0.5f, 0.5f, 1.0f);  // 0.5 for 50/50 averaging
+                                s.draw(batch);
+                                batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+                                
 
 							}
 						}
