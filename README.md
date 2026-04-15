@@ -5,10 +5,10 @@ Simple wave function collapse test project implemented in Java. Creates output t
 Implemented: 
 * Rotations in 2d
 * Output texture tileability
+* Backtracking
 
 TODO:
 
-* Backtracking
 * 3D
 * Symmetries
 * ...
