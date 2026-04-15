@@ -2,6 +2,8 @@
 
 Simple wave function collapse implemented in Java. Generates textures from small tiles based on constraint rules, with real-time visualization of the algorithm stepping through each cell.
 
+![example image](wfc0.gif)
+
 Implemented: 
 * Rotations in 2d
 * Output texture tileability
