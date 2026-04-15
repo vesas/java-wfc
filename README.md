@@ -13,6 +13,24 @@ TODO:
 * Symmetries
 * ...
 
+## How to Run
+
+```
+./gradlew desktop:run
+```
+
+## Controls
+
+| Key     | Action                    |
+|---------|---------------------------|
+| `Space` | Step one round (observe + propagate) |
+| `1`     | Run to completion         |
+| `o`     | Observe step only         |
+| `p`     | Propagate step only       |
+| `g`     | Print grid to console     |
+| `c`     | Print constraints         |
+| `r`     | Print rotations           |
+
 ## Test output:
 
 ### Circuits
