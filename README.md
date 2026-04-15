@@ -4,6 +4,10 @@ Simple wave function collapse implemented in Java. Generates textures from small
 
 ![example image](wfc0.gif)
 
+## How it Works
+
+Each tile defines **ports** on its edges (north, south, east, west). Two tiles can sit next to each other only if their adjacent ports match. The algorithm picks the most constrained cell, collapses it to one tile, and propagates the constraints outward — repeating until the entire grid is filled. If it hits a dead end, it backtracks and tries a different choice.
+
 Implemented: 
 * Rotations in 2d
 * Output texture tileability
