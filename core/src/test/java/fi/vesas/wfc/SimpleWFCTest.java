@@ -2,6 +2,8 @@ package fi.vesas.wfc;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -203,6 +205,118 @@ public class SimpleWFCTest {
         assertArrayEquals(new int[]{3}, wfc.getGrid(0, 2));
         // (0,3) must be narrowed to tile 1 (tile 3 has no north port, so only tile 1 fits)
         assertArrayEquals(new int[]{1}, wfc.getGrid(0, 3));
+    }
+
+    @Test
+    public void testBacktrackingFindsValidSolution() {
+        // 2x2 grid, 3 tiles, no empty, no rotations, no tiling
+        // Constraints are tight enough that some random choices will fail,
+        // requiring backtracking to find a valid assignment.
+        //
+        // Tile 1: port 10 on N, port 10 on E
+        // Tile 2: port 10 on S, port 10 on W
+        // Tile 3: (no ports — filler)
+        //
+        // Valid 2x2 layouts require tile 1 bottom-left and tile 2 top-right
+        // (or rotated equivalents). A random first pick of tile 3 in the wrong
+        // spot can create a contradiction.
+        //
+        // We test via run() which loops observe+propagate+backtrack until done.
+
+        // Try multiple seeds — at least some will require backtracking
+        int successCount = 0;
+        for(int seed = 0; seed < 20; seed++) {
+            SimpleWFC wfc = new SimpleWFC(2, 2, 3, false, false);
+            wfc.setSeed(seed);
+
+            Constraints constraints = new Constraints();
+            constraints.addPort(1, DIR.N, 10);
+            constraints.addPort(1, DIR.E, 10);
+            constraints.addPort(2, DIR.S, 10);
+            constraints.addPort(2, DIR.W, 10);
+
+            wfc.setConstraints(constraints);
+            wfc.run();
+
+            assertTrue(wfc.isFinished(), "seed " + seed + " should finish");
+            assertFalse(wfc.isContradiction(), "seed " + seed + " should not end in contradiction");
+
+            // Every cell must have exactly 1 tile
+            for(int x = 0; x < 2; x++) {
+                for(int y = 0; y < 2; y++) {
+                    assertEquals(1, wfc.getGrid(x, y).length,
+                        "seed " + seed + " cell (" + x + "," + y + ") should be collapsed");
+                }
+            }
+            successCount++;
+        }
+
+        assertEquals(20, successCount, "All seeds should produce a valid solution");
+    }
+
+    @Test
+    public void testBacktrackingWithLinearChain() {
+        // 1x6 grid with vertical tiling and a strict cyclic chain: 1->2->3->1->2->3
+        // Every tile has ports on both N and S, so random picks that break the
+        // cycle will cause contradictions — backtracking must recover.
+        SimpleWFC wfc = new SimpleWFC(1, 6, 3, false, false);
+        wfc.setSeed(7);
+        wfc.setTilingVertical(true);
+
+        Constraints constraints = new Constraints();
+        constraints.addPort(1, DIR.N, 10);
+        constraints.addPort(1, DIR.S, 30);
+        constraints.addPort(2, DIR.S, 10);
+        constraints.addPort(2, DIR.N, 20);
+        constraints.addPort(3, DIR.S, 20);
+        constraints.addPort(3, DIR.N, 30);
+
+        wfc.setConstraints(constraints);
+        wfc.run();
+
+        assertTrue(wfc.isFinished(), "should finish");
+        assertFalse(wfc.isContradiction(), "should not end in contradiction");
+
+        // Verify every cell is collapsed
+        for(int y = 0; y < 6; y++) {
+            int[] cell = wfc.getGrid(0, y);
+            assertEquals(1, cell.length, "cell (0," + y + ") should be collapsed");
+        }
+
+        // Verify the chain: each cell's north neighbor must follow the pattern
+        for(int y = 0; y < 6; y++) {
+            int tile = wfc.getGrid(0, y)[0];
+            int northY = (y + 1) % 6;
+            int northTile = wfc.getGrid(0, northY)[0];
+            int expectedNorth = (tile % 3) + 1;  // 1->2, 2->3, 3->1
+            assertEquals(expectedNorth, northTile,
+                "tile " + tile + " at y=" + y + " should have tile " + expectedNorth + " to the north");
+        }
+    }
+
+    @Test
+    public void testBacktrackingExhaustedOnImpossibleConstraints() {
+        // 1x4 grid with vertical tiling and a 3-cycle: 1->2->3->1
+        // 4 is not divisible by 3, so the cycle can never close — no valid solution.
+        // Backtracking should exhaust all possibilities and report failure.
+        SimpleWFC wfc = new SimpleWFC(1, 4, 3, false, false);
+        wfc.setSeed(0);
+        wfc.setTilingVertical(true);
+
+        Constraints constraints = new Constraints();
+        constraints.addPort(1, DIR.N, 10);
+        constraints.addPort(1, DIR.S, 30);
+        constraints.addPort(2, DIR.S, 10);
+        constraints.addPort(2, DIR.N, 20);
+        constraints.addPort(3, DIR.S, 20);
+        constraints.addPort(3, DIR.N, 30);
+
+        wfc.setConstraints(constraints);
+        wfc.run();
+
+        assertTrue(wfc.isContradiction(), "should end in contradiction (impossible constraints)");
+        assertTrue(wfc.getBacktrackCount() > 0,
+            "should have attempted backtracking before giving up (count=" + wfc.getBacktrackCount() + ")");
     }
 
     @Test

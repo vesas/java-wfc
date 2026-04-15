@@ -1,6 +1,8 @@
 package fi.vesas.wfc;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -885,106 +887,110 @@ public class SimpleWFC {
         int x = pos % stride;
 
         Set<TileAndRotation> allAllowedTiles = this.tilesAndRotations(x,y);
-        
+
         // check allowedTiles set against all directions, and remove impossible ones
         filterTileChoices(x, y, DIR.N, allAllowedTiles);
         filterTileChoices(x, y, DIR.S, allAllowedTiles);
         filterTileChoices(x, y, DIR.E, allAllowedTiles);
         filterTileChoices(x, y, DIR.W, allAllowedTiles);
 
-        // Ok, multiple choices available, now OBSERVE (choose random one) and collapse to one choice
+        if(allAllowedTiles.isEmpty()) {
+            contradiction = true;
+            return;
+        }
+
+        // Save snapshot before making a choice (only when there IS a choice)
         if(allAllowedTiles.size() > 1) {
+            Snapshot snapshot = new Snapshot();
+            snapshot.idGrid = deepCopyGrid(idGrid);
+            snapshot.rotationGrid = deepCopyGrid(rotationGrid);
+            snapshot.x = x;
+            snapshot.y = y;
+            snapshot.remainingChoices = new ArrayList<>(allAllowedTiles);
+            backtrackStack.push(snapshot);
+        }
 
-            int rand = random.nextInt(allAllowedTiles.size());
+        // Pick one choice and collapse
+        List<TileAndRotation> choices = new ArrayList<>(allAllowedTiles);
+        int rand = random.nextInt(choices.size());
+        TileAndRotation chosen = choices.get(rand);
 
-            int currentIndex = 0;
-            for(TileAndRotation in : allAllowedTiles) {
-
-                if(rand == currentIndex) {
-
-                    this.setPos(x,y, in.tile);
-
-                    int bitsOn = bitsOn(in.rot);
-                    int randRot = random.nextInt(bitsOn);
-
-                    int counter = 0;
-                    if((in.rot & 8) == 8) {
-                        if(counter == randRot) {
-                            this.setRotation(x,y, 8);
-                        }
-                        counter++;
-                    }
-                    if((in.rot & 4) == 4) {
-                        if(counter == randRot) {
-                            this.setRotation(x,y, 4);
-                        }
-                        counter++;
-                    }
-                    if((in.rot & 2) == 2) {
-                        if(counter == randRot) {
-                            this.setRotation(x,y,2);
-                        }
-                        counter++;
-                    }
-                    if((in.rot & 1) == 1) {
-                        if(counter == randRot) {
-                            this.setRotation(x,y, 1);
-                        }
-                        counter++;
-                    }
-
-                    this.lastModifiedX = x;
-                    this.lastModifiedY = y;
-                    break;
-                }
-
-                currentIndex++;
+        // Remove the chosen option from the snapshot so we don't retry it
+        if(!backtrackStack.isEmpty()) {
+            Snapshot top = backtrackStack.peek();
+            if(top.x == x && top.y == y) {
+                top.remainingChoices.remove(chosen);
             }
         }
-        else if(allAllowedTiles.size() == 1) {
 
-            for(TileAndRotation in : allAllowedTiles) {
+        collapseCell(x, y, chosen);
 
-                this.setPos(x,y, in.tile);
+    }
 
-                int bitsOn = bitsOn(in.rot);
-                int randRot = random.nextInt(bitsOn);
+    private void collapseCell(int x, int y, TileAndRotation choice) {
+        this.setPos(x, y, choice.tile);
 
-                int counter = 0;
-                if((in.rot & 8) == 8) {
-                    if(counter == randRot) {
-                        this.setRotation(x,y, 8);
-                    }
-                    counter++;
-                }
-                if((in.rot & 4) == 4) {
-                    if(counter == randRot) {
-                        this.setRotation(x,y, 4);
-                    }
-                    counter++;
-                }
-                if((in.rot & 2) == 2) {
-                    if(counter == randRot) {
-                        this.setRotation(x,y, 2);
-                    }
-                    counter++;
-                }
-                if((in.rot & 1) == 1) {
-                    if(counter == randRot) {
-                        this.setRotation(x,y, 1);
-                    }
-                    counter++;
-                }
+        int bitsOn = bitsOn(choice.rot);
+        int randRot = random.nextInt(bitsOn);
 
-                this.lastModifiedX = x;
-                this.lastModifiedY = y;
-                break;
+        int counter = 0;
+        if((choice.rot & 8) == 8) {
+            if(counter == randRot) {
+                this.setRotation(x, y, 8);
             }
+            counter++;
         }
-        else {
-            System.out.println("ERROR: 0 tiles possible");
+        if((choice.rot & 4) == 4) {
+            if(counter == randRot) {
+                this.setRotation(x, y, 4);
+            }
+            counter++;
+        }
+        if((choice.rot & 2) == 2) {
+            if(counter == randRot) {
+                this.setRotation(x, y, 2);
+            }
+            counter++;
+        }
+        if((choice.rot & 1) == 1) {
+            if(counter == randRot) {
+                this.setRotation(x, y, 1);
+            }
+            counter++;
         }
 
+        this.lastModifiedX = x;
+        this.lastModifiedY = y;
+    }
+
+    // Attempt to backtrack to a previous decision point and try a different choice.
+    // Returns true if backtracking succeeded (a new choice was made), false if exhausted.
+    private boolean backtrack() {
+
+        while(!backtrackStack.isEmpty()) {
+            Snapshot snapshot = backtrackStack.peek();
+
+            if(snapshot.remainingChoices.isEmpty()) {
+                // All choices exhausted at this level, go back further
+                backtrackStack.pop();
+                continue;
+            }
+
+            // Restore the grid state from before the failed choice
+            restoreGrids(snapshot);
+            contradiction = false;
+            backtrackCount++;
+
+            // Pick a different choice
+            int rand = random.nextInt(snapshot.remainingChoices.size());
+            TileAndRotation chosen = snapshot.remainingChoices.remove(rand);
+
+            collapseCell(snapshot.x, snapshot.y, chosen);
+            return true;
+        }
+
+        // Stack empty — no solution exists
+        return false;
     }
 
     private int bitsOn(int val) {
@@ -1065,8 +1071,13 @@ public class SimpleWFC {
         while(!coords.isEmpty()) {
 
             CoordFromTo co = coords.poll();
-            
+
             boolean changed = checkSinglePropTile(co);
+
+            if(contradiction) {
+                coords.clear();
+                return;
+            }
 
             if(changed) {
                 // add all tiles leading out from the changed cell, except back toward source
@@ -1264,7 +1275,11 @@ public class SimpleWFC {
         int [] temprots = new int[newlen];
         System.arraycopy(newrots, 0, temprots, 0, newlen);
         rotationGrid[coordFromTo.to.x][coordFromTo.to.y] = temprots;
-        
+
+        if(newlen == 0) {
+            contradiction = true;
+        }
+
         return changed;
     }
 
@@ -1294,7 +1309,27 @@ public class SimpleWFC {
 
         observe();
 
+        if(contradiction) {
+            if(!backtrack()) {
+                System.out.println("No solution exists (backtrack exhausted)");
+                finished = true;
+                return;
+            }
+            // backtrack succeeded — propagate from the new choice
+        }
+
         if(!finished) {
+            propagate();
+        }
+
+        // contradiction during propagation — try to backtrack
+        if(contradiction) {
+            if(!backtrack()) {
+                System.out.println("No solution exists (backtrack exhausted)");
+                finished = true;
+                return;
+            }
+            // backtrack restored state and made a new choice, propagate it
             propagate();
         }
 
@@ -1309,7 +1344,24 @@ public class SimpleWFC {
         while(!finished) {
             observe();
 
+            if(contradiction) {
+                if(!backtrack()) {
+                    System.out.println("No solution exists (backtrack exhausted)");
+                    finished = true;
+                    return;
+                }
+            }
+
             if(!finished) {
+                propagate();
+            }
+
+            while(contradiction) {
+                if(!backtrack()) {
+                    System.out.println("No solution exists (backtrack exhausted)");
+                    finished = true;
+                    return;
+                }
                 propagate();
             }
 
@@ -1319,5 +1371,43 @@ public class SimpleWFC {
     }
 
     private boolean finished = false;
+    private boolean contradiction = false;
+    private int backtrackCount = 0;
 
+    public int getBacktrackCount() {
+        return backtrackCount;
+    }
+
+    public boolean isContradiction() {
+        return contradiction;
+    }
+
+    private static class Snapshot {
+        int[][][] idGrid;
+        int[][][] rotationGrid;
+        int x, y;
+        List<TileAndRotation> remainingChoices;
+    }
+
+    private Deque<Snapshot> backtrackStack = new ArrayDeque<>();
+
+    private int[][][] deepCopyGrid(int[][][] grid) {
+        int[][][] copy = new int[grid.length][][];
+        for(int i = 0; i < grid.length; i++) {
+            copy[i] = new int[grid[i].length][];
+            for(int j = 0; j < grid[i].length; j++) {
+                copy[i][j] = grid[i][j].clone();
+            }
+        }
+        return copy;
+    }
+
+    private void restoreGrids(Snapshot snapshot) {
+        for(int i = 0; i < snapshot.idGrid.length; i++) {
+            for(int j = 0; j < snapshot.idGrid[i].length; j++) {
+                idGrid[i][j] = snapshot.idGrid[i][j].clone();
+                rotationGrid[i][j] = snapshot.rotationGrid[i][j].clone();
+            }
+        }
+    }
 }
