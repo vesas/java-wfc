@@ -1,6 +1,6 @@
 # Simple WFC
 
-Simple wave function collapse test project implemented in Java. Creates output texture from simple tiles based on constraints defined in code, rather than the usual image based input.
+Simple wave function collapse implemented in Java. Generates textures from small tiles based on constraint rules, with real-time visualization of the algorithm stepping through each cell.
 
 Implemented: 
 * Rotations in 2d
