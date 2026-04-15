@@ -1,14 +1,11 @@
 package fi.vesas.wfc;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
@@ -97,62 +94,6 @@ public class SimpleWFC {
 
         public String toString() {
             return "" + this.state + "[" + this.dir + "]";
-        }
-    }
-
-    public static class Constraints {
-
-        Map<StateDir,Integer> ports = new HashMap<StateDir,Integer>();
-
-        public void addPort(int source, DIR dir, int portId) {
-            StateDir stateDir = new StateDir();
-            stateDir.state = source;
-            stateDir.dir = dir;
-            ports.put(stateDir,portId);
-        }
-
-        public int getPort(int source, DIR dir, int targetRots) {
-
-            StateDir stateDir = new StateDir();
-            stateDir.state = source;
-            stateDir.dir = dir;
-
-            Integer port = ports.get(stateDir);
-
-            if(port != null) {
-                return port;
-            }
-            else {
-                return -1;
-            }
-        }
-
-        public int getPort(int source, DIR dir) {
-            StateDir stateDir = new StateDir();
-            stateDir.state = source;
-            stateDir.dir = dir;
-
-            Integer port = ports.get(stateDir);
-
-            if(port != null) {
-                return port;
-            }
-            else {
-                return -1;
-            }
-        }
-
-        public void printConstraints() {
-
-            Set<Entry<StateDir,Integer>> temp = this.ports.entrySet();
-
-            System.out.println("constraints: ");
-
-            for(Entry<StateDir, Integer> entry : temp) {
-
-                System.out.println("" + entry.getKey() + " -> " + entry.getValue());
-            }
-            
         }
     }
 
@@ -304,9 +245,11 @@ public class SimpleWFC {
         return possibilities == null ? 0 : possibilities.length;
     }
 
-    // Find a tile which has some choices left, but also has the lowest number of choices
-    // TODO: mod this to include surrounding cells (and edges)
-    public int findLowEntrypy() {
+    /**
+     * Find position which has lowest number of choices, but higher than 1
+     * @return position index in the grid (height * stride + width)
+     */
+    public int findLowEntropy() {
 
         int stride = this.width;
 
@@ -924,7 +867,7 @@ public class SimpleWFC {
 
     public void observe() {
 
-        int pos = this.findLowEntrypy();
+        int pos = this.findLowEntropy();
 
         int lowestEntropy = -1;
         if(pos > -1) {
@@ -1057,9 +1000,12 @@ public class SimpleWFC {
 
     public void propagate() {
 
+        // Take the last modified position
         int x = this.lastModifiedX;
         int y = this.lastModifiedY;
 
+        // Add all possible tiles leading out from the last modified position
+        // 
         // north direction
         if(y == height-1) {
             // at top, only add if wraparound is specified
@@ -1073,6 +1019,7 @@ public class SimpleWFC {
             CoordFromTo fromTo = new CoordFromTo(x,y, x, y+1, DIR.N);
             coords.add(fromTo);
         }
+
         // south direction
         if(y == 0) {
             // at bottom, only add if wraparound is specified
@@ -1089,7 +1036,7 @@ public class SimpleWFC {
         // west direction
         if(x == 0) {
             // at left side, only add if wraparound is specified
-            if(this.tilingVertical) {
+            if(this.tilingHorizontal) {
                 CoordFromTo fromTo = new CoordFromTo(x,y, width-1,y, DIR.W);
                 coords.add(fromTo);
             }
@@ -1103,7 +1050,7 @@ public class SimpleWFC {
         // east
         if(x == width-1) {
             // at right side, only add if wraparound is specified
-            if(this.tilingVertical) {
+            if(this.tilingHorizontal) {
                 CoordFromTo fromTo = new CoordFromTo(x,y, 0,y, DIR.E);
                 coords.add(fromTo);
             }
@@ -1114,8 +1061,7 @@ public class SimpleWFC {
             coords.add(fromTo);
         }
 
-        
-        
+        // Propagate the changes
         while(!coords.isEmpty()) {
 
             CoordFromTo co = coords.poll();
@@ -1123,55 +1069,57 @@ public class SimpleWFC {
             boolean changed = checkSinglePropTile(co);
 
             if(changed) {
-                // add all tiles leading out, except from tile
+                // add all tiles leading out from the changed cell, except back toward source
+                int toX = co.to.x;
+                int toY = co.to.y;
 
                 // north
                 // do not go back to the same tile
                 if(co.dir != DIR.S) {
-                    if(co.from.y == height-1) {
+                    if(toY == height-1) {
                         // at top, only add if wraparound is specified
                         if(this.tilingVertical) {
-                            CoordFromTo fromTo = new CoordFromTo(x,y, x, 0, DIR.N);
+                            CoordFromTo fromTo = new CoordFromTo(toX, toY, toX, 0, DIR.N);
                             coords.add(fromTo);
                         }
 
                     }
                     else {
-                        CoordFromTo fromTo = new CoordFromTo(x,y, x, y+1, DIR.N);
+                        CoordFromTo fromTo = new CoordFromTo(toX, toY, toX, toY+1, DIR.N);
                         coords.add(fromTo);
                     }
                 }
-                
+
                 // south direction
                 // do not go back to the same tile
                 if(co.dir != DIR.N) {
-                    if(co.from.y == 0) {
+                    if(toY == 0) {
                         // at bottom, only add if wraparound is specified
                         if(this.tilingVertical) {
-                            CoordFromTo fromTo = new CoordFromTo(x,y, x, height-1, DIR.S);
+                            CoordFromTo fromTo = new CoordFromTo(toX, toY, toX, height-1, DIR.S);
                             coords.add(fromTo);
                         }
 
                     }
                     else {
-                        CoordFromTo fromTo = new CoordFromTo(x,y, x, y-1, DIR.S);
+                        CoordFromTo fromTo = new CoordFromTo(toX, toY, toX, toY-1, DIR.S);
                         coords.add(fromTo);
                     }
                 }
-                
+
                 // west direction
                 // do not go back to the same tile
                 if(co.dir != DIR.E) {
-                    if(co.from.x == 0) {
+                    if(toX == 0) {
                         // at left side, only add if wraparound is specified
-                        if(this.tilingVertical) {
-                            CoordFromTo fromTo = new CoordFromTo(x,y, width-1,y, DIR.W);
+                        if(this.tilingHorizontal) {
+                            CoordFromTo fromTo = new CoordFromTo(toX, toY, width-1, toY, DIR.W);
                             coords.add(fromTo);
                         }
 
                     }
                     else {
-                        CoordFromTo fromTo = new CoordFromTo(x,y, x-1, y, DIR.W);
+                        CoordFromTo fromTo = new CoordFromTo(toX, toY, toX-1, toY, DIR.W);
                         coords.add(fromTo);
                     }
                 }
@@ -1179,16 +1127,16 @@ public class SimpleWFC {
                 // east
                 // do not go back to the same tile
                 if(co.dir != DIR.W) {
-                    if(co.from.x == (width-1)) {
+                    if(toX == (width-1)) {
                         // at right side, only add if wraparound is specified
-                        if(this.tilingVertical) {
-                            CoordFromTo fromTo = new CoordFromTo(x,y, 0,y, DIR.E);
+                        if(this.tilingHorizontal) {
+                            CoordFromTo fromTo = new CoordFromTo(toX, toY, 0, toY, DIR.E);
                             coords.add(fromTo);
                         }
 
                     }
                     else {
-                        CoordFromTo fromTo = new CoordFromTo(x,y, x+1, y, DIR.E);
+                        CoordFromTo fromTo = new CoordFromTo(toX, toY, toX+1, toY, DIR.E);
                         coords.add(fromTo);
                     }
                 }

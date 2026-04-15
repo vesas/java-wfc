@@ -12,7 +12,6 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.utils.ScreenUtils;
 
-import fi.vesas.wfc.SimpleWFC.Constraints;
 import fi.vesas.wfc.SimpleWFC.DIR;
 
 public class MyGdxGame extends ApplicationAdapter {

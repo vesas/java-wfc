@@ -1,13 +1,11 @@
 package fi.vesas.wfc;
 
-import org.junit.jupiter.api.Test;
-
-import fi.vesas.wfc.SimpleWFC;
-import fi.vesas.wfc.SimpleWFC.Constraints;
-import fi.vesas.wfc.SimpleWFC.DIR;
-
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import org.junit.jupiter.api.Test;
+
+import fi.vesas.wfc.SimpleWFC.DIR;
 
 public class SimpleWFCTest {
     
@@ -55,14 +53,14 @@ public class SimpleWFCTest {
         int [] rots1 = wfc.getRots(1, 0);
 
         // position [0,0] should have only tile 1 as a possibility at this point
-        assertArrayEquals(grid0, new int[]{1});
+        assertArrayEquals(new int[]{1}, grid0);
         // position [1,0] should have only tile 2 as a possibility at this point
-        assertArrayEquals(grid1, new int[]{2});
+        assertArrayEquals(new int[]{2}, grid1);
 
         // position [0,0] should have only rotation 8 as a possibility. (possible rotations are 1,2,4,8 and combinations)
-        assertArrayEquals(rots0, new int[]{8});
+        assertArrayEquals(new int[]{8}, rots0);
         // position [1,0] should have only rotation 8 as a possibility as well. (possible rotations are 1,2,4,8 and combinations)
-        assertArrayEquals(rots1, new int[]{8});
+        assertArrayEquals(new int[]{8}, rots1);
 
     }
 
@@ -80,29 +78,25 @@ public class SimpleWFCTest {
         constraints.addPort(2, DIR.S, 1);
         constraints.addPort(2, DIR.W, 1);
 
-        // wfc.setValuesAt(0,0,2);
-        // wfc.setRotationsAt(1,0,15,15);
-        
         wfc.setConstraints(constraints);
         wfc.printConstraints();
+
         wfc.printGrid();
         wfc.printRotations();
 
         wfc.runOneRound();
+
         wfc.printGrid();
         wfc.printRotations();
 
-        wfc.runOneRound();
-        wfc.printGrid();
-        wfc.printRotations();
+        int [] grid0 = wfc.getGrid(0, 0);
+        int [] rots0 = wfc.getRots(0, 0);
+        
+        // position [0,0] should have only tile 2 as a possibility at this point
+        assertArrayEquals(new int[]{2}, grid0);
 
-        wfc.runOneRound();
-        wfc.printGrid();
-        wfc.printRotations();
-
-        wfc.runOneRound();
-        wfc.printGrid();
-        wfc.printRotations();
+        // position [0,0] should have only rotation 4 as a possibility. (possible rotations are 1,2,4,8 and combinations)
+        assertArrayEquals(new int[]{4}, rots0);
 
     }
 
@@ -163,10 +157,52 @@ public class SimpleWFCTest {
     }
 
     @Test
-    public void test2() {
-        SimpleWFC wfc = new SimpleWFC(2,2, 2, true, true);
-        wfc.setPos(1,1, 0);
+    public void testFindLowEntropy() {
+        SimpleWFC wfc = new SimpleWFC(2, 2, 3, true, true);
+    
+        wfc.setValuesAt(0, 0, 0, 1, 2);     // entropy = 3
+        wfc.setValuesAt(1, 0, 1);           // entropy = 1
+        wfc.setValuesAt(0, 1, 0, 1);        // entropy = 2
+        wfc.setValuesAt(1, 1, 1, 2);        // entropy = 2
+        
         wfc.printGrid();
+        // Position [0,1] (2) has low entropy of 2x
+        // This method ignores positions with only one possibility
+        int lowEntropyPos = wfc.findLowEntropy();
+        
+        assertEquals(2, lowEntropyPos, "Index with low entropy should be 2");
+    }
+
+    @Test
+    public void testPropagationReachesDistantCells() {
+        // 1x4 vertical grid, 3 tiles, no empty, no rotations, no tiling
+        // Constraints form a chain: tile1 --N/port10--> tile2 --N/port20--> tile3
+        SimpleWFC wfc = new SimpleWFC(1, 4, 3, false, false);
+        wfc.setSeed(42);
+
+        Constraints constraints = new Constraints();
+        constraints.addPort(1, DIR.N, 10);  // tile 1 connects north via port 10
+        constraints.addPort(2, DIR.S, 10);  // tile 2 receives from south via port 10
+        constraints.addPort(2, DIR.N, 20);  // tile 2 connects north via port 20
+        constraints.addPort(3, DIR.S, 20);  // tile 3 receives from south via port 20
+
+        wfc.setConstraints(constraints);
+
+        // First observe: picks (0,0) — bottom edge forces tile 1 (only tile without south port).
+        // Propagation should chain: (0,0)->tile1 narrows (0,1)->tile2 narrows (0,2)->tile3 narrows (0,3)->tile1
+        wfc.runOneRound();
+
+        wfc.printGrid();
+
+        // (0,0) collapsed to tile 1 (only valid at bottom edge — tiles 2,3 have south ports)
+        assertArrayEquals(new int[]{1}, wfc.getGrid(0, 0));
+        // (0,1) narrowed to tile 2 (direct neighbor of collapse point, port 10 match)
+        assertArrayEquals(new int[]{2}, wfc.getGrid(0, 1));
+        // (0,2) must be narrowed to tile 3 via propagation THROUGH (0,1)
+        // If propagation doesn't chain past direct neighbors, this stays {1,2,3}
+        assertArrayEquals(new int[]{3}, wfc.getGrid(0, 2));
+        // (0,3) must be narrowed to tile 1 (tile 3 has no north port, so only tile 1 fits)
+        assertArrayEquals(new int[]{1}, wfc.getGrid(0, 3));
     }
 
     @Test
@@ -184,4 +220,6 @@ public class SimpleWFCTest {
         assertEquals(DIR.N, DIR.N.rotateCW(4));
         
     }
+
+    
 }
