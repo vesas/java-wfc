@@ -3,7 +3,7 @@ package fi.vesas.wfc;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration;
 
-import fi.vesas.wfc.MyGdxGame;
+import fi.vesas.wfc.WfcApp;
 
 public class DesktopLauncher {
 
@@ -13,15 +13,15 @@ public class DesktopLauncher {
     }
 
     private static Lwjgl3Application createApplication() {
-        return new Lwjgl3Application(new MyGdxGame(), getDefaultConfiguration());
+        return new Lwjgl3Application(new WfcApp(), getDefaultConfiguration());
     }
 
     private static Lwjgl3ApplicationConfiguration getDefaultConfiguration() {
         Lwjgl3ApplicationConfiguration configuration = new Lwjgl3ApplicationConfiguration();
-        configuration.setTitle("Simple WFC");
+        configuration.setTitle("Java WFC");
         configuration.useVsync(true);
         configuration.setForegroundFPS(Lwjgl3ApplicationConfiguration.getDisplayMode().refreshRate + 1);
-        configuration.setWindowedMode(896, 640);
+        configuration.setWindowedMode(1200, 720);
         return configuration;
     }
 }   
