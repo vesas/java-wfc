@@ -37,6 +37,15 @@ TODO:
 | `c`     | Print constraints         |
 | `r`     | Print rotations           |
 
+## Tiled model — generate circuit texture
+  ./gradlew core:generate --args="tiled assets --basename circ --tiling --seed 229 --output circuit.png"
+
+## Overlapping model — generate texture from any sample image
+  ./gradlew core:generate --args="overlapping sample.png --size 64x64 --tiling --output result.png"
+
+## Batch — generate 10 variations
+  ./gradlew core:generate --args="overlapping sample.png --size 64x64 --count 10 --seed 1 --output textures/"
+
 ## Test output:
 
 ### Circuits

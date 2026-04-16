@@ -28,4 +28,11 @@ jacocoTestReport {
     dependsOn test // tests are required to run before generating the report
 }
 
+tasks.register('generate', JavaExec) {
+    description = 'Run WFC texture generator CLI'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'fi.vesas.wfc.WfcCli'
+    workingDir = rootProject.projectDir
+}
+
 eclipse.project.name = appName + "-core"

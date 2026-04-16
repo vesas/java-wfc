@@ -144,6 +144,18 @@ public class SimpleWFC {
         this.tilingHorizontal = tilingHorizontal;
     }
 
+    public int getWidth() {
+        return width;
+    }
+
+    public int getHeight() {
+        return height;
+    }
+
+    public boolean isEmptyAllowed() {
+        return emptyAllowed;
+    }
+
     private Random random = new Random();
 
     public int [][][] getRots() {
@@ -1266,7 +1278,7 @@ public class SimpleWFC {
             }
         }
 
-        changed = newlen != checktilesTo.length;
+        changed |= newlen != checktilesTo.length;
 
         int [] tempres = new int[newlen];
         System.arraycopy(newtiles, 0, tempres, 0, newlen);
