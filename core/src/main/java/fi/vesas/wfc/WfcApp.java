@@ -31,7 +31,7 @@ import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
 public class WfcApp extends ApplicationAdapter {
 
-    private static final int PANEL_WIDTH = 250;
+    private static final int PANEL_WIDTH = 260;
 
     // Rendering
     private Stage stage;
@@ -235,7 +235,8 @@ public class WfcApp extends ApplicationAdapter {
         root.setFillParent(true);
 
         Table controlPanel = new Table(skin);
-        controlPanel.top().left().pad(10);
+        controlPanel.top().left();
+        controlPanel.columnDefaults(1).width(150);
 
         // -- Mode selector --
         controlPanel.add(new Label("Mode:", skin)).left().padRight(6);
@@ -344,7 +345,6 @@ public class WfcApp extends ApplicationAdapter {
         addSeparator(controlPanel);
         controlPanel.add(new Label("Space=Step Enter=Run\nR=Reset  E=Export", skin)).left().colspan(2).row();
 
-        // Assemble
         ScrollPane scrollPane = new ScrollPane(controlPanel, skin);
         scrollPane.setFadeScrollBars(false);
         scrollPane.setScrollingDisabled(true, false);
@@ -356,6 +356,7 @@ public class WfcApp extends ApplicationAdapter {
     }
 
     private void buildTiledSection(Table section) {
+        section.columnDefaults(1).width(150);
         section.add(new Label("Tileset:", skin)).left().padRight(6);
         tilesetSelect = new SelectBox<>(skin);
         rebuildTilesetDropdown();
@@ -393,6 +394,7 @@ public class WfcApp extends ApplicationAdapter {
     }
 
     private void buildOverlappingSection(Table section) {
+        section.columnDefaults(1).width(150);
         // Help text
         Label helpLabel = new Label("Use a small image (16-64px)\nwith few distinct colors.", skin);
         helpLabel.setWrap(true);
