@@ -72,6 +72,13 @@ public class WfcApp extends ApplicationAdapter {
     private boolean autoRunning;
     private float stepInterval = 0.05f;
     private float stepTimer;
+    // Max time spent on solver steps per frame while auto-running.
+    private static final long STEP_BUDGET_NANOS = 12_000_000L;
+
+    // Slider 0..1 maps exponentially to 2..2000 steps per second.
+    private static float speedToInterval(float v) {
+        return 1f / (2f * (float) Math.pow(1000.0, v));
+    }
     private int stepCount;
 
     // Highlight effect
@@ -321,13 +328,13 @@ public class WfcApp extends ApplicationAdapter {
         addSeparator(controlPanel);
         controlPanel.add(new Label("Speed:", skin)).left().padRight(6);
         speedSlider = new Slider(0f, 1f, 0.01f, false, skin);
-        speedSlider.setValue(0.9f);
+        speedSlider.setValue(0.6f);
         speedSlider.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
-                stepInterval = 0.5f * (1f - speedSlider.getValue());
+                stepInterval = speedToInterval(speedSlider.getValue());
             }
         });
-        stepInterval = 0.5f * (1f - 0.9f);
+        stepInterval = speedToInterval(0.6f);
         controlPanel.add(speedSlider).fillX().row();
 
         // -- Status labels --
@@ -928,10 +935,17 @@ public class WfcApp extends ApplicationAdapter {
         ScreenUtils.clear(0.15f, 0.15f, 0.18f, 1);
 
         if (autoRunning) {
+            // Run as many steps as the speed asks for, possibly several per frame,
+            // but stop after a time budget so the window stays responsive.
             stepTimer += Gdx.graphics.getDeltaTime();
-            if (stepTimer >= stepInterval) {
+            long deadline = System.nanoTime() + STEP_BUDGET_NANOS;
+            while (autoRunning && stepTimer >= stepInterval) {
                 stepTimer -= stepInterval;
                 doStep();
+                if (System.nanoTime() > deadline) {
+                    stepTimer = 0;
+                    break;
+                }
             }
         }
 

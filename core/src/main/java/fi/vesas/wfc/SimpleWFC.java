@@ -7,9 +7,7 @@ import java.util.Deque;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
@@ -42,21 +40,24 @@ public class SimpleWFC {
 
     public enum DIR {
         N,E,S,W;
-        
-        // Returns direction value rotated counter clockwise 
+
+        // values() clones the array on every call; cache it
+        private static final DIR[] VALUES = values();
+
+        // Returns direction value rotated counter clockwise
         public DIR rotateCCW(int times) {
             int newOrd = (this.ordinal() - times + 4) % 4;
-            return DIR.values()[newOrd];
+            return VALUES[newOrd];
         }
 
         // rotates clockwise
         public DIR rotateCW(int times) {
             int newOrd = (this.ordinal() + times) % 4;
-            return DIR.values()[newOrd];
+            return VALUES[newOrd];
         }
 
         public DIR opposite() {
-            return DIR.values()[(ordinal() + 2) % 4];
+            return VALUES[(ordinal() + 2) % 4];
         }
     }
 
@@ -177,8 +178,7 @@ public class SimpleWFC {
                     }
                 }
 
-                idGrid[x][y] = Arrays.copyOf(newTiles, newLen);
-                rotationGrid[x][y] = Arrays.copyOf(newRots, newLen);
+                setCell(x, y, Arrays.copyOf(newTiles, newLen), Arrays.copyOf(newRots, newLen));
 
                 if (newLen == 0) {
                     contradiction = true;
@@ -367,22 +367,41 @@ public class SimpleWFC {
 
     public void setValuesAt(int x, int y, int ... values)
     {
-        idGrid[x][y] = values;
+        setCell(x, y, values, rotationGrid[x][y]);
     }
 
     public void setRotationsAt(int x, int y, int ... values)
     {
-        rotationGrid[x][y] = values;
+        setCell(x, y, idGrid[x][y], values);
     }
 
-    private void setValuesAt(int index, int [] values) {
-
-        int stride = this.width;
-        int y = index / stride;
-        int x = index % stride;
-
-        idGrid[x][y] = values;
+    /*
+     * All cell writes go through here. Cell arrays are never modified in place,
+     * only replaced, so while a backtrack point exists we record the old array
+     * references on a trail. Backtracking undoes the trail back to the snapshot's
+     * mark instead of deep-copying the whole grid at every decision.
+     */
+    private void setCell(int x, int y, int[] ids, int[] rots) {
+        if (!backtrackStack.isEmpty()) {
+            if (trailSize == trailCell.length) {
+                int n = trailCell.length * 2;
+                trailCell = Arrays.copyOf(trailCell, n);
+                trailIds = Arrays.copyOf(trailIds, n);
+                trailRots = Arrays.copyOf(trailRots, n);
+            }
+            trailCell[trailSize] = x * height + y;
+            trailIds[trailSize] = idGrid[x][y];
+            trailRots[trailSize] = rotationGrid[x][y];
+            trailSize++;
+        }
+        idGrid[x][y] = ids;
+        rotationGrid[x][y] = rots;
     }
+
+    private int trailSize = 0;
+    private int[] trailCell = new int[1024];
+    private int[][] trailIds = new int[1024][];
+    private int[][] trailRots = new int[1024][];
 
     private int [] getRandomValueAt(int index) {
 
@@ -770,13 +789,11 @@ public class SimpleWFC {
 
 
     public void setPos(int x, int y, int value) {
-        int [] temp = { value };
-        idGrid[x][y] = temp;
+        setCell(x, y, new int[] { value }, rotationGrid[x][y]);
     }
 
     public void setRotation(int x, int y, int value) {
-        int [] temp = { value };
-        rotationGrid[x][y] = temp;
+        setCell(x, y, idGrid[x][y], new int[] { value });
     }
 
     // filter out ports pointing at dir, because we are edge looking at dir
@@ -992,8 +1009,7 @@ public class SimpleWFC {
         // Save snapshot before making a choice (only when there IS a choice)
         if(allAllowedTiles.size() > 1) {
             Snapshot snapshot = new Snapshot();
-            snapshot.idGrid = deepCopyGrid(idGrid);
-            snapshot.rotationGrid = deepCopyGrid(rotationGrid);
+            snapshot.trailMark = trailSize;
             snapshot.x = x;
             snapshot.y = y;
             snapshot.remainingChoices = new ArrayList<>(allAllowedTiles);
@@ -1018,36 +1034,22 @@ public class SimpleWFC {
     }
 
     private void collapseCell(int x, int y, TileAndRotation choice) {
-        this.setPos(x, y, choice.tile);
-
         int bitsOn = bitsOn(choice.rot);
         int randRot = random.nextInt(bitsOn);
 
+        // pick the randRot-th set bit, counting from the highest (8, 4, 2, 1)
+        int chosenRot = 0;
         int counter = 0;
-        if((choice.rot & 8) == 8) {
-            if(counter == randRot) {
-                this.setRotation(x, y, 8);
+        for(int bit = 8; bit >= 1; bit >>= 1) {
+            if((choice.rot & bit) == bit) {
+                if(counter == randRot) {
+                    chosenRot = bit;
+                }
+                counter++;
             }
-            counter++;
         }
-        if((choice.rot & 4) == 4) {
-            if(counter == randRot) {
-                this.setRotation(x, y, 4);
-            }
-            counter++;
-        }
-        if((choice.rot & 2) == 2) {
-            if(counter == randRot) {
-                this.setRotation(x, y, 2);
-            }
-            counter++;
-        }
-        if((choice.rot & 1) == 1) {
-            if(counter == randRot) {
-                this.setRotation(x, y, 1);
-            }
-            counter++;
-        }
+
+        setCell(x, y, new int[] { choice.tile }, new int[] { chosenRot });
 
         this.lastModifiedX = x;
         this.lastModifiedY = y;
@@ -1067,7 +1069,7 @@ public class SimpleWFC {
             }
 
             // Restore the grid state from before the failed choice
-            restoreGrids(snapshot);
+            undoTrail(snapshot.trailMark);
             contradiction = false;
             backtrackCount++;
 
@@ -1092,288 +1094,180 @@ public class SimpleWFC {
         return count;
     }
 
-    private Queue<CoordFromTo> coords = new LinkedList<CoordFromTo>();
+    // Propagation work queue: entries of (fromCell, toCell, dir), cell = x * height + y.
+    private int[] queue = new int[3 * 256];
+    private int queueHead, queueTail;
+
+    private void enqueue(int fromX, int fromY, int toX, int toY, int dir) {
+        if (queueTail + 3 > queue.length) {
+            queue = Arrays.copyOf(queue, queue.length * 2);
+        }
+        queue[queueTail++] = fromX * height + fromY;
+        queue[queueTail++] = toX * height + toY;
+        queue[queueTail++] = dir;
+    }
+
+    // DIR ordinals
+    private static final int DN = 0, DE = 1, DS = 2, DW = 3;
+
+    // Queue the neighbours of (x, y), skipping direction skipDir (-1 = none).
+    // Order N, S, W, E matches the original propagation order.
+    private void enqueueNeighbours(int x, int y, int skipDir) {
+        if(skipDir != DN) {
+            if(y == height-1) {
+                if(this.tilingVertical) enqueue(x, y, x, 0, DN);
+            }
+            else enqueue(x, y, x, y+1, DN);
+        }
+        if(skipDir != DS) {
+            if(y == 0) {
+                if(this.tilingVertical) enqueue(x, y, x, height-1, DS);
+            }
+            else enqueue(x, y, x, y-1, DS);
+        }
+        if(skipDir != DW) {
+            if(x == 0) {
+                if(this.tilingHorizontal) enqueue(x, y, width-1, y, DW);
+            }
+            else enqueue(x, y, x-1, y, DW);
+        }
+        if(skipDir != DE) {
+            if(x == width-1) {
+                if(this.tilingHorizontal) enqueue(x, y, 0, y, DE);
+            }
+            else enqueue(x, y, x+1, y, DE);
+        }
+    }
 
     public void propagate() {
 
-        // Take the last modified position
-        int x = this.lastModifiedX;
-        int y = this.lastModifiedY;
+        queueHead = 0;
+        queueTail = 0;
 
-        // Add all possible tiles leading out from the last modified position
-        // 
-        // north direction
-        if(y == height-1) {
-            // at top, only add if wraparound is specified
-            if(this.tilingVertical) {
-                CoordFromTo fromTo = new CoordFromTo(x,y, x, 0, DIR.N);
-                coords.add(fromTo);
-            }
-
-        }
-        else {
-            CoordFromTo fromTo = new CoordFromTo(x,y, x, y+1, DIR.N);
-            coords.add(fromTo);
-        }
-
-        // south direction
-        if(y == 0) {
-            // at bottom, only add if wraparound is specified
-            if(this.tilingVertical) {
-                CoordFromTo fromTo = new CoordFromTo(x,y, x, height-1, DIR.S);
-                coords.add(fromTo);
-            }
-
-        }
-        else {
-            CoordFromTo fromTo = new CoordFromTo(x,y, x, y-1, DIR.S);
-            coords.add(fromTo);
-        }
-        // west direction
-        if(x == 0) {
-            // at left side, only add if wraparound is specified
-            if(this.tilingHorizontal) {
-                CoordFromTo fromTo = new CoordFromTo(x,y, width-1,y, DIR.W);
-                coords.add(fromTo);
-            }
-
-        }
-        else {
-            CoordFromTo fromTo = new CoordFromTo(x,y, x-1, y, DIR.W);
-            coords.add(fromTo);
-        }
-
-        // east
-        if(x == width-1) {
-            // at right side, only add if wraparound is specified
-            if(this.tilingHorizontal) {
-                CoordFromTo fromTo = new CoordFromTo(x,y, 0,y, DIR.E);
-                coords.add(fromTo);
-            }
-
-        }
-        else {
-            CoordFromTo fromTo = new CoordFromTo(x,y, x+1, y, DIR.E);
-            coords.add(fromTo);
-        }
+        // Add all neighbours of the last modified position
+        enqueueNeighbours(this.lastModifiedX, this.lastModifiedY, -1);
 
         // Propagate the changes
-        while(!coords.isEmpty()) {
+        while(queueHead < queueTail) {
 
-            CoordFromTo co = coords.poll();
+            int from = queue[queueHead++];
+            int to = queue[queueHead++];
+            int dir = queue[queueHead++];
 
-            boolean changed = checkSinglePropTile(co);
+            int toX = to / height, toY = to % height;
+            boolean changed = checkProp(from / height, from % height, toX, toY, dir);
 
             if(contradiction) {
-                coords.clear();
+                queueHead = queueTail = 0;
                 return;
             }
 
             if(changed) {
-                // add all tiles leading out from the changed cell, except back toward source
-                int toX = co.to.x;
-                int toY = co.to.y;
-
-                // north
-                // do not go back to the same tile
-                if(co.dir != DIR.S) {
-                    if(toY == height-1) {
-                        // at top, only add if wraparound is specified
-                        if(this.tilingVertical) {
-                            CoordFromTo fromTo = new CoordFromTo(toX, toY, toX, 0, DIR.N);
-                            coords.add(fromTo);
-                        }
-
-                    }
-                    else {
-                        CoordFromTo fromTo = new CoordFromTo(toX, toY, toX, toY+1, DIR.N);
-                        coords.add(fromTo);
-                    }
-                }
-
-                // south direction
-                // do not go back to the same tile
-                if(co.dir != DIR.N) {
-                    if(toY == 0) {
-                        // at bottom, only add if wraparound is specified
-                        if(this.tilingVertical) {
-                            CoordFromTo fromTo = new CoordFromTo(toX, toY, toX, height-1, DIR.S);
-                            coords.add(fromTo);
-                        }
-
-                    }
-                    else {
-                        CoordFromTo fromTo = new CoordFromTo(toX, toY, toX, toY-1, DIR.S);
-                        coords.add(fromTo);
-                    }
-                }
-
-                // west direction
-                // do not go back to the same tile
-                if(co.dir != DIR.E) {
-                    if(toX == 0) {
-                        // at left side, only add if wraparound is specified
-                        if(this.tilingHorizontal) {
-                            CoordFromTo fromTo = new CoordFromTo(toX, toY, width-1, toY, DIR.W);
-                            coords.add(fromTo);
-                        }
-
-                    }
-                    else {
-                        CoordFromTo fromTo = new CoordFromTo(toX, toY, toX-1, toY, DIR.W);
-                        coords.add(fromTo);
-                    }
-                }
-
-                // east
-                // do not go back to the same tile
-                if(co.dir != DIR.W) {
-                    if(toX == (width-1)) {
-                        // at right side, only add if wraparound is specified
-                        if(this.tilingHorizontal) {
-                            CoordFromTo fromTo = new CoordFromTo(toX, toY, 0, toY, DIR.E);
-                            coords.add(fromTo);
-                        }
-
-                    }
-                    else {
-                        CoordFromTo fromTo = new CoordFromTo(toX, toY, toX+1, toY, DIR.E);
-                        coords.add(fromTo);
-                    }
-                }
+                // add all neighbours of the changed cell, except back toward the source
+                enqueueNeighbours(toX, toY, (dir + 2) & 3);
             }
         }
 
-        coords.clear();
+        queueHead = queueTail = 0;
 
         finished = true;
     }
 
-    private Set<Integer> allowedPorts(int [] checktilesFrom, int [] checkrotsFrom, DIR dir)  {
-        // int [] ports = new int[checktilesFrom.length];
-        Set<Integer> ports = new HashSet<Integer>();
+    // Reusable "set of ports" for checkProp: port p is in the set when portSeen[p - minPort] == portStamp.
+    private int[] portSeen = new int[0];
+    private int portStamp = 0;
 
-        for(int i = 0; i < checktilesFrom.length; i++) {
-
-            int tile = checktilesFrom[i];
-            int rot = checkrotsFrom[i];
-
-            if((rot & 1) == 1) { 
-                int port = constraints.getPort(tile, dir);
-                ports.add(port);
-            }
-            if((rot & 2) == 2) { 
-                int port = constraints.getPort(tile, dir.rotateCCW(1));
-                ports.add(port);
-            }
-            if((rot & 4) == 4) { 
-                int port = constraints.getPort(tile, dir.rotateCCW(2));
-                ports.add(port);
-            }
-            if((rot & 8) == 8) { 
-                int port = constraints.getPort(tile, dir.rotateCCW(3));
-                ports.add(port);
-            }
-
-        }
-        
-        return ports;
-    }
-
-    // narrows tiles, and 
+    // narrows tiles, and
     // returns true if something changed, add all other dirs except from
     public boolean checkSinglePropTile(CoordFromTo coordFromTo) {
+        return checkProp(coordFromTo.from.x, coordFromTo.from.y,
+                coordFromTo.to.x, coordFromTo.to.y, coordFromTo.dir.ordinal());
+    }
 
-        boolean changed = false;
+    private boolean checkProp(int fromX, int fromY, int toX, int toY, int dir) {
 
-        int [] checktilesTo = idGrid[coordFromTo.to.x][coordFromTo.to.y];
-        int [] checkrotsTo = rotationGrid[coordFromTo.to.x][coordFromTo.to.y];
+        int [] checktilesTo = idGrid[toX][toY];
+        int [] checkrotsTo = rotationGrid[toX][toY];
 
-        int [] checktilesFrom = idGrid[coordFromTo.from.x][coordFromTo.from.y];
-        int [] checkrotsFrom = rotationGrid[coordFromTo.from.x][coordFromTo.from.y];
+        int [] checktilesFrom = idGrid[fromX][fromY];
+        int [] checkrotsFrom = rotationGrid[fromX][fromY];
 
-        DIR dir = coordFromTo.dir;
-        DIR opposite = dir.opposite();
+        int opposite = (dir + 2) & 3;
 
-        int [] newtiles = new int[checktilesTo.length];
-        int [] newrots = new int[checktilesTo.length];
+        int lo = constraints.getMinPort();
+        int size = constraints.getMaxPort() - lo + 1;
+        if (portSeen.length < size) {
+            portSeen = new int[size];
+            portStamp = 0;
+        }
+        if (++portStamp == 0) {
+            Arrays.fill(portSeen, 0);
+            portStamp = 1;
+        }
+        final int[] seen = portSeen;
+        final int stamp = portStamp;
+
+        // Collect the ports the source cell can present toward dir.
+        // A tile rotated j times CCW faces world direction d with its own side (d - j) mod 4.
+        for(int i = 0; i < checktilesFrom.length; i++) {
+            int tile = checktilesFrom[i];
+            int rot = checkrotsFrom[i];
+            for(int j = 0; j < 4; j++) {
+                if((rot & (1 << j)) != 0) {
+                    seen[constraints.getPort(tile, (dir - j) & 3) - lo] = stamp;
+                }
+            }
+        }
+
+        // Find which target options survive. Allocate only if something changes.
+        int [] newtiles = null;
+        int [] newrots = null;
         int newlen = 0;
-        int newrot = 0;
-
-        Set<Integer> allowedPortsFrom = allowedPorts(checktilesFrom, checkrotsFrom, dir);
 
         for(int i = 0; i < checktilesTo.length; i++) {
             int tileTo = checktilesTo[i];
             int rotTo = checkrotsTo[i];
 
-            // remove rots, check at end if rots is 0
-            newrot = rotTo;
-
-            if((rotTo & 1)== 1) {
-
-                int port = constraints.getPort(tileTo, opposite);
-
-                if(!allowedPortsFrom.contains(port)) {
-                    newrot = newrot & ~1;
-                    changed = true;
+            int newrot = rotTo;
+            for(int j = 0; j < 4; j++) {
+                int bit = 1 << j;
+                if((rotTo & bit) != 0
+                        && seen[constraints.getPort(tileTo, (opposite - j) & 3) - lo] != stamp) {
+                    newrot &= ~bit;
                 }
             }
 
-            if((rotTo & 2)== 2) {
-
-                int port = constraints.getPort(tileTo, opposite.rotateCCW(1));
-
-                if(!allowedPortsFrom.contains(port)) {
-                    newrot = newrot & ~2;
-                    changed = true;
-                }
+            if(newrot != rotTo && newtiles == null) {
+                // first change: copy the unchanged prefix
+                newtiles = new int[checktilesTo.length];
+                newrots = new int[checktilesTo.length];
+                System.arraycopy(checktilesTo, 0, newtiles, 0, i);
+                System.arraycopy(checkrotsTo, 0, newrots, 0, i);
+                newlen = i;
             }
 
-            if((rotTo & 4) == 4) {
-
-                int port = constraints.getPort(tileTo, opposite.rotateCCW(2));
-
-                if(!allowedPortsFrom.contains(port)) {
-                    newrot = newrot & ~4;
-                    changed = true;
-                }
-            }
-
-            if((rotTo & 8) == 8) {
-
-                int port = constraints.getPort(tileTo, opposite.rotateCCW(3));
-
-                if(!allowedPortsFrom.contains(port)) {
-                    newrot = newrot & ~8;
-                    changed = true;
-                }
-            }
-
-            if(newrot > 0)  {
+            if(newtiles != null && newrot > 0) {
                 newtiles[newlen] = tileTo;
                 newrots[newlen] = newrot;
                 newlen++;
             }
         }
 
-        changed |= newlen != checktilesTo.length;
+        if(newtiles == null) {
+            if(checktilesTo.length == 0) {
+                contradiction = true;
+            }
+            return false;
+        }
 
-        int [] tempres = new int[newlen];
-        System.arraycopy(newtiles, 0, tempres, 0, newlen);
-        idGrid[coordFromTo.to.x][coordFromTo.to.y] = tempres;
-
-        int [] temprots = new int[newlen];
-        System.arraycopy(newrots, 0, temprots, 0, newlen);
-        rotationGrid[coordFromTo.to.x][coordFromTo.to.y] = temprots;
+        setCell(toX, toY, Arrays.copyOf(newtiles, newlen), Arrays.copyOf(newrots, newlen));
 
         if(newlen == 0) {
             contradiction = true;
         }
 
-        return changed;
+        return true;
     }
-
-
 
     public boolean isFinished() {
 
@@ -1475,31 +1369,24 @@ public class SimpleWFC {
     }
 
     private static class Snapshot {
-        int[][][] idGrid;
-        int[][][] rotationGrid;
+        // trail length when the snapshot was taken; undoing back to it restores the grid
+        int trailMark;
         int x, y;
         List<TileAndRotation> remainingChoices;
     }
 
     private Deque<Snapshot> backtrackStack = new ArrayDeque<>();
 
-    private int[][][] deepCopyGrid(int[][][] grid) {
-        int[][][] copy = new int[grid.length][][];
-        for(int i = 0; i < grid.length; i++) {
-            copy[i] = new int[grid[i].length][];
-            for(int j = 0; j < grid[i].length; j++) {
-                copy[i][j] = grid[i][j].clone();
-            }
-        }
-        return copy;
-    }
-
-    private void restoreGrids(Snapshot snapshot) {
-        for(int i = 0; i < snapshot.idGrid.length; i++) {
-            for(int j = 0; j < snapshot.idGrid[i].length; j++) {
-                idGrid[i][j] = snapshot.idGrid[i][j].clone();
-                rotationGrid[i][j] = snapshot.rotationGrid[i][j].clone();
-            }
+    private void undoTrail(int mark) {
+        while(trailSize > mark) {
+            trailSize--;
+            int cell = trailCell[trailSize];
+            int x = cell / height;
+            int y = cell % height;
+            idGrid[x][y] = trailIds[trailSize];
+            rotationGrid[x][y] = trailRots[trailSize];
+            trailIds[trailSize] = null;
+            trailRots[trailSize] = null;
         }
     }
 }
