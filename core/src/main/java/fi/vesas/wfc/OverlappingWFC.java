@@ -129,21 +129,11 @@ public class OverlappingWFC {
             this.samplePixels = sample.getRGB(0, 0, sampleWidth, sampleHeight, null, 0, sampleWidth);
         }
 
-        long t0 = System.currentTimeMillis();
         extractPatterns();
-        long t1 = System.currentTimeMillis();
         buildPropagator();
-        long t2 = System.currentTimeMillis();
         buildNeighborTable();
         initPropQueue();
         initWave();
-        long t3 = System.currentTimeMillis();
-
-        System.out.println("Init: patterns=" + patternCount
-            + (tileImages != null ? " uniqueTiles=" + tileImages.length : "")
-            + " extract=" + (t1 - t0) + "ms"
-            + " propagator=" + (t2 - t1) + "ms"
-            + " wave=" + (t3 - t2) + "ms");
     }
 
     // ========== Tile slicing ==========
@@ -609,7 +599,6 @@ public class OverlappingWFC {
     public void run(int maxRetries) {
         for (int attempt = 0; attempt <= maxRetries; attempt++) {
             if (attempt > 0) {
-                System.out.println("  retry " + attempt + "/" + maxRetries + "...");
                 resetWave();
             }
             while (!finished && !contradiction) {

@@ -12,11 +12,9 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.files.FileHandle;
-import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.Texture.TextureFilter;
-import com.badlogic.gdx.graphics.g2d.Sprite;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
@@ -31,7 +29,8 @@ import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
 public class WfcApp extends ApplicationAdapter {
 
-    private static final int PANEL_WIDTH = 260;
+    private static final int PANEL_WIDTH = 290;
+    private static final int CANVAS_MARGIN = 12;
 
     // Rendering
     private Stage stage;
@@ -91,7 +90,8 @@ public class WfcApp extends ApplicationAdapter {
 
     // UI widgets
     private SelectBox<String> modeSelect;
-    private Table tiledSection, overlappingSection;
+    private Table controlPanel, tiledSection, overlappingSection;
+    private Cell<Table> modeSectionCell;
     private SelectBox<String> tilesetSelect;
     private TextField gridWField, gridHField;
     private Table tilePreviewTable;
@@ -234,8 +234,8 @@ public class WfcApp extends ApplicationAdapter {
         Table root = new Table(skin);
         root.setFillParent(true);
 
-        Table controlPanel = new Table(skin);
-        controlPanel.top().left();
+        controlPanel = new Table(skin);
+        controlPanel.pad(8).top().left();
         controlPanel.columnDefaults(1).width(150);
 
         // -- Mode selector --
@@ -245,24 +245,21 @@ public class WfcApp extends ApplicationAdapter {
         modeSelect.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent event, Actor actor) {
                 tiledMode = modeSelect.getSelectedIndex() == 0;
-                tiledSection.setVisible(tiledMode);
-                overlappingSection.setVisible(!tiledMode);
-                autoRunning = false;
-                runBtn.setText("Run");
+                // Swap the section in place; an invisible actor would still reserve its space.
+                modeSectionCell.setActor(tiledMode ? tiledSection : overlappingSection);
+                controlPanel.invalidateHierarchy();
+                doReset();
             }
         });
         controlPanel.add(modeSelect).fillX().row();
 
-        // -- Tiled section --
+        // -- Mode-specific section (tiled or overlapping, swapped on mode change) --
         tiledSection = new Table(skin);
         buildTiledSection(tiledSection);
-        controlPanel.add(tiledSection).colspan(2).fillX().row();
-
-        // -- Overlapping section --
         overlappingSection = new Table(skin);
         buildOverlappingSection(overlappingSection);
-        overlappingSection.setVisible(false);
-        controlPanel.add(overlappingSection).colspan(2).fillX().row();
+        modeSectionCell = controlPanel.add((Table) tiledSection).colspan(2).fillX();
+        controlPanel.row();
 
         // -- Common section --
         addSeparator(controlPanel);
@@ -380,7 +377,8 @@ public class WfcApp extends ApplicationAdapter {
         tilePreviewTable = new Table();
         ScrollPane tilePreviewScroll = new ScrollPane(tilePreviewTable, skin);
         tilePreviewScroll.setScrollingDisabled(false, true);
-        section.add(tilePreviewScroll).colspan(2).height(40).fillX().padTop(4).row();
+        tilePreviewScroll.setFadeScrollBars(false);
+        section.add(tilePreviewScroll).colspan(2).height(52).fillX().padTop(4).padBottom(4).row();
 
         section.add(new Label("Grid W:", skin)).left().padRight(6);
         gridWField = new TextField("28", skin);
@@ -425,6 +423,7 @@ public class WfcApp extends ApplicationAdapter {
 
         // Sample preview image
         samplePreviewImage = new Image();
+        samplePreviewImage.setScaling(com.badlogic.gdx.utils.Scaling.fit);
         section.add(samplePreviewImage).colspan(2).size(200, 150).padTop(4).row();
 
         // Sample info (dimensions, colors)
@@ -904,7 +903,7 @@ public class WfcApp extends ApplicationAdapter {
                 statusLabel.setText("Contradiction!");
                 autoRunning = false; runBtn.setText("Run");
             } else {
-                statusLabel.setText("Running...");
+                statusLabel.setText(stepCount == 0 ? "Ready" : autoRunning ? "Running..." : "Paused");
             }
         } else if (!tiledMode && overlappingWfc != null) {
             backtracksLabel.setText("Backtracks: " + overlappingWfc.getBacktrackCount());
@@ -915,7 +914,9 @@ public class WfcApp extends ApplicationAdapter {
                 statusLabel.setText("Contradiction!");
                 autoRunning = false; runBtn.setText("Run");
             } else {
-                statusLabel.setText("Running...");
+                statusLabel.setText(stepCount == 0
+                    ? "Ready (" + overlappingWfc.getPatternCount() + " patterns)"
+                    : autoRunning ? "Running..." : "Paused");
             }
         }
     }
@@ -954,38 +955,56 @@ public class WfcApp extends ApplicationAdapter {
         int gridW = grid.length;
         int gridH = grid[0].length;
 
+        // Fit the grid into the canvas area and center it.
+        float canvasW = Gdx.graphics.getWidth() - PANEL_WIDTH - 2 * CANVAS_MARGIN;
+        float canvasH = Gdx.graphics.getHeight() - 2 * CANVAS_MARGIN;
+        float scale = Math.min(canvasW / (gridW * tilePixelW), canvasH / (gridH * tilePixelH));
+        float cellW = tilePixelW * scale, cellH = tilePixelH * scale;
+        float originX = PANEL_WIDTH + CANVAS_MARGIN + (canvasW - cellW * gridW) / 2;
+        float originY = CANVAS_MARGIN + (canvasH - cellH * gridH) / 2;
+
+        shapeRenderer.begin(ShapeType.Filled);
+        shapeRenderer.setColor(0.08f, 0.08f, 0.10f, 1f);
+        shapeRenderer.rect(originX, originY, cellW * gridW, cellH * gridH);
         if (lightEffect > 0) {
-            shapeRenderer.begin(ShapeType.Filled);
             float t = lightEffect;
             shapeRenderer.setColor(t, t, t * 0.5f, 1.0f);
-            shapeRenderer.rect(PANEL_WIDTH + lightEffectX * tilePixelW, lightEffectY * tilePixelH, tilePixelW, tilePixelH);
-            shapeRenderer.end();
+            shapeRenderer.rect(originX + lightEffectX * cellW, originY + lightEffectY * cellH, cellW, cellH);
             lightEffect -= 0.04f;
         }
+        shapeRenderer.end();
 
         batch.begin();
         for (int x = 0; x < gridW; x++) {
             for (int y = 0; y < gridH; y++) {
                 int[] possibilities = grid[x][y];
                 int[] rotations = rots[x][y];
+
+                // Count remaining options so undecided cells show as a faint superposition.
+                int options = 0;
+                for (int i = 0; i < possibilities.length; i++) {
+                    int tile = possibilities[i];
+                    if (tile > 0 && tile - 1 < tileTextures.length)
+                        options += Integer.bitCount(rotations[i] & 0xF);
+                }
+                if (options == 0) continue;
+                float alpha = options == 1 ? 1f : Math.max(0.06f, 0.6f / options);
+                batch.setColor(1f, 1f, 1f, alpha);
+
+                float px = originX + x * cellW, py = originY + y * cellH;
                 for (int i = 0; i < possibilities.length; i++) {
                     int rot = rotations[i], tile = possibilities[i];
-                    if (tile > 0 && tile - 1 < tileTextures.length) {
-                        for (int j = 0; j < 4; j++) {
-                            if ((rot & (1 << j)) > 0) {
-                                Sprite s = new Sprite(tileTextures[tile - 1]);
-                                s.setOriginCenter();
-                                s.setRotation(-j * 90);
-                                s.setPosition(PANEL_WIDTH + x * tilePixelW, y * tilePixelH);
-                                batch.setBlendFunction(GL20.GL_CONSTANT_COLOR, GL20.GL_ONE_MINUS_SRC_ALPHA);
-                                s.draw(batch);
-                                batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
-                            }
-                        }
+                    if (tile <= 0 || tile - 1 >= tileTextures.length) continue;
+                    Texture tex = tileTextures[tile - 1];
+                    for (int j = 0; j < 4; j++) {
+                        if ((rot & (1 << j)) == 0) continue;
+                        batch.draw(tex, px, py, cellW / 2, cellH / 2, cellW, cellH, 1f, 1f, -j * 90,
+                                0, 0, tex.getWidth(), tex.getHeight(), false, false);
                     }
                 }
             }
         }
+        batch.setColor(1f, 1f, 1f, 1f);
         batch.end();
     }
 
@@ -1031,24 +1050,24 @@ public class WfcApp extends ApplicationAdapter {
     }
 
     private void drawTextureFit(Texture tex) {
-        float canvasW = Gdx.graphics.getWidth() - PANEL_WIDTH;
-        float canvasH = Gdx.graphics.getHeight();
+        float canvasW = Gdx.graphics.getWidth() - PANEL_WIDTH - 2 * CANVAS_MARGIN;
+        float canvasH = Gdx.graphics.getHeight() - 2 * CANVAS_MARGIN;
         float scale = Math.min(canvasW / tex.getWidth(), canvasH / tex.getHeight());
         float drawW = tex.getWidth() * scale, drawH = tex.getHeight() * scale;
-        float drawX = PANEL_WIDTH + (canvasW - drawW) / 2;
-        float drawY = (canvasH - drawH) / 2;
+        float drawX = PANEL_WIDTH + CANVAS_MARGIN + (canvasW - drawW) / 2;
+        float drawY = CANVAS_MARGIN + (canvasH - drawH) / 2;
         batch.begin();
         batch.draw(tex, drawX, drawY, drawW, drawH);
         batch.end();
     }
 
     private void drawTexture2x2(Texture tex) {
-        float canvasW = Gdx.graphics.getWidth() - PANEL_WIDTH;
-        float canvasH = Gdx.graphics.getHeight();
+        float canvasW = Gdx.graphics.getWidth() - PANEL_WIDTH - 2 * CANVAS_MARGIN;
+        float canvasH = Gdx.graphics.getHeight() - 2 * CANVAS_MARGIN;
         float scale = Math.min(canvasW / (tex.getWidth() * 2f), canvasH / (tex.getHeight() * 2f));
         float tileW = tex.getWidth() * scale, tileH = tex.getHeight() * scale;
-        float baseX = PANEL_WIDTH + (canvasW - tileW * 2) / 2;
-        float baseY = (canvasH - tileH * 2) / 2;
+        float baseX = PANEL_WIDTH + CANVAS_MARGIN + (canvasW - tileW * 2) / 2;
+        float baseY = CANVAS_MARGIN + (canvasH - tileH * 2) / 2;
         batch.begin();
         for (int ty = 0; ty < 2; ty++)
             for (int tx = 0; tx < 2; tx++)
@@ -1075,6 +1094,10 @@ public class WfcApp extends ApplicationAdapter {
     @Override
     public void resize(int width, int height) {
         stage.getViewport().update(width, height, true);
+        // Without this, the canvas drawing stays in the original window's coordinates after a resize.
+        batch.getProjectionMatrix().setToOrtho2D(0, 0, width, height);
+        shapeRenderer.getProjectionMatrix().setToOrtho2D(0, 0, width, height);
+        shapeRenderer.updateMatrices();
     }
 
     @Override

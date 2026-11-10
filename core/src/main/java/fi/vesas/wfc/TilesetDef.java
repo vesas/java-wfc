@@ -129,23 +129,24 @@ public class TilesetDef {
     public static TilesetDef crossTileset() {
         Constraints c = new Constraints();
 
-        // cross1: full cross - ports on all 4 sides
+        // cross1: vertical bar - ports N and S
         c.addPort(1, DIR.N, 1);
         c.addPort(1, DIR.S, 1);
-        c.addPort(1, DIR.E, 1);
-        c.addPort(1, DIR.W, 1);
 
-        // cross2: vertical bar - ports N and S
+        // cross2: full cross - ports on all 4 sides
         c.addPort(2, DIR.N, 1);
         c.addPort(2, DIR.S, 1);
+        c.addPort(2, DIR.E, 1);
+        c.addPort(2, DIR.W, 1);
 
-        // cross3: T-junction - ports N, E, W
-        c.addPort(3, DIR.N, 1);
+        // cross3: T-junction - ports S, E, W
+        c.addPort(3, DIR.S, 1);
         c.addPort(3, DIR.E, 1);
         c.addPort(3, DIR.W, 1);
 
-        // cross4: end cap - port S only
+        // cross4: elbow - ports S and W
         c.addPort(4, DIR.S, 1);
+        c.addPort(4, DIR.W, 1);
 
         return new TilesetDef("Cross", "cross", 5, true, true, 32, 32, c);
     }
@@ -157,12 +158,12 @@ public class TilesetDef {
         c.addPort(1, DIR.N, 1);
         c.addPort(1, DIR.S, 1);
 
-        // pipe2: elbow - ports N and E
-        c.addPort(2, DIR.N, 1);
+        // pipe2: elbow - ports E and S
         c.addPort(2, DIR.E, 1);
+        c.addPort(2, DIR.S, 1);
 
-        // pipe3: T-junction - ports N, E, W
-        c.addPort(3, DIR.N, 1);
+        // pipe3: T-junction - ports S, E, W
+        c.addPort(3, DIR.S, 1);
         c.addPort(3, DIR.E, 1);
         c.addPort(3, DIR.W, 1);
 

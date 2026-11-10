@@ -2,6 +2,7 @@ package fi.vesas.wfc;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -11,6 +12,7 @@ import java.util.List;
 import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 
 public class SimpleWFC {
     
@@ -107,6 +109,82 @@ public class SimpleWFC {
 
     public void setConstraints(Constraints constraints) {
         this.constraints = constraints;
+    }
+
+    private AllowedTileSource allowedTileSource;
+
+    public AllowedTileSource getAllowedTileSource() {
+        return allowedTileSource;
+    }
+
+    /**
+     * Narrow each cell's candidate tile IDs to those allowed by the source.
+     * Applied immediately to the current grid state; cells whose source returns
+     * {@code null} are untouched. Setting a new source re-applies it on top of
+     * the existing grid — calling this after construction and before
+     * {@link #run()} is the intended flow.
+     *
+     * If every tile ID in a cell is disallowed, {@link #isContradiction()}
+     * flips true and {@link #run()} returns immediately without a solution.
+     */
+    private BooleanSupplier cancellationCheck;
+
+    /**
+     * Install a cancellation probe. {@link #run()} polls this at the top of
+     * each observe/propagate iteration; if it returns {@code true}, the solver
+     * stops immediately and leaves the grid in its current (partial) state.
+     *
+     * Wire this to {@code ctx::isCancelled} from a {@link fi.vesas.wfc.gen.GenContext}
+     * when running on a background thread so the game can abandon generation
+     * when the player leaves the region.
+     */
+    public void setCancellationCheck(BooleanSupplier check) {
+        this.cancellationCheck = check;
+    }
+
+    private boolean shouldAbort() {
+        return cancellationCheck != null && cancellationCheck.getAsBoolean();
+    }
+
+    public void setAllowedTileSource(AllowedTileSource source) {
+        this.allowedTileSource = source;
+        if (source == null) {
+            return;
+        }
+
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                int[] allowed = source.allowedTileIds(x, y);
+                if (allowed == null) {
+                    continue;
+                }
+
+                Set<Integer> allowedSet = new HashSet<>(allowed.length * 2);
+                for (int id : allowed) {
+                    allowedSet.add(id);
+                }
+
+                int[] currentTiles = idGrid[x][y];
+                int[] currentRots = rotationGrid[x][y];
+                int[] newTiles = new int[currentTiles.length];
+                int[] newRots = new int[currentTiles.length];
+                int newLen = 0;
+                for (int i = 0; i < currentTiles.length; i++) {
+                    if (allowedSet.contains(currentTiles[i])) {
+                        newTiles[newLen] = currentTiles[i];
+                        newRots[newLen] = currentRots[i];
+                        newLen++;
+                    }
+                }
+
+                idGrid[x][y] = Arrays.copyOf(newTiles, newLen);
+                rotationGrid[x][y] = Arrays.copyOf(newRots, newLen);
+
+                if (newLen == 0) {
+                    contradiction = true;
+                }
+            }
+        }
     }
 
     // grid of arrays of still possible tile id's
@@ -1323,7 +1401,6 @@ public class SimpleWFC {
 
         if(contradiction) {
             if(!backtrack()) {
-                System.out.println("No solution exists (backtrack exhausted)");
                 finished = true;
                 return;
             }
@@ -1337,7 +1414,6 @@ public class SimpleWFC {
         // contradiction during propagation — try to backtrack
         if(contradiction) {
             if(!backtrack()) {
-                System.out.println("No solution exists (backtrack exhausted)");
                 finished = true;
                 return;
             }
@@ -1354,11 +1430,16 @@ public class SimpleWFC {
         this.finished = false;
 
         while(!finished) {
+
+            if(shouldAbort()) {
+                finished = true;
+                return;
+            }
+
             observe();
 
             if(contradiction) {
                 if(!backtrack()) {
-                    System.out.println("No solution exists (backtrack exhausted)");
                     finished = true;
                     return;
                 }
@@ -1370,7 +1451,6 @@ public class SimpleWFC {
 
             while(contradiction) {
                 if(!backtrack()) {
-                    System.out.println("No solution exists (backtrack exhausted)");
                     finished = true;
                     return;
                 }

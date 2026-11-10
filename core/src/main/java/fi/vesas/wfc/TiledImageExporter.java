@@ -61,11 +61,12 @@ public class TiledImageExporter {
                                 double centerX = pixelX + tileW / 2.0;
                                 double centerY = pixelY + tileH / 2.0;
 
-                                // LibGDX does setRotation(-j * 90) which is j*90 CW.
-                                // AffineTransform.getQuadrantRotateInstance(-j) rotates CCW by -j*90 = CW by j*90.
+                                // The solver treats rotation bit j as j*90 degrees clockwise
+                                // (LibGDX draws it with rotation -j*90). Java2D is y-down, so a
+                                // positive angle already turns clockwise on screen.
                                 AffineTransform transform = new AffineTransform();
                                 transform.translate(pixelX, pixelY);
-                                transform.rotate(-j * Math.PI / 2.0, tileW / 2.0, tileH / 2.0);
+                                transform.rotate(j * Math.PI / 2.0, tileW / 2.0, tileH / 2.0);
 
                                 g.drawImage(tileImg, transform, null);
                             }
