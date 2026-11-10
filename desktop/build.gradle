@@ -1,4 +1,3 @@
-sourceCompatibility = 21
 sourceSets.main.java.srcDirs = [ "src/" ]
 sourceSets.main.resources.srcDirs = ["../assets"]
 
@@ -29,6 +28,20 @@ tasks.register('debug', JavaExec) {
     workingDir = project.assetsDir
     ignoreExitValue = true
     debug = true
+}
+
+tasks.register('runDemos', JavaExec) {
+    description = 'Launch the visual pipeline demo app'
+    dependsOn classes
+    mainClass = 'fi.vesas.wfc.PipelineDemoLauncher'
+    classpath = sourceSets.main.runtimeClasspath
+    standardInput = System.in
+    workingDir = project.assetsDir
+    ignoreExitValue = true
+
+    if (OperatingSystem.current() == OperatingSystem.MAC_OS) {
+        jvmArgs += "-XstartOnFirstThread"
+    }
 }
 
 tasks.register('dist', Jar) {
