@@ -4,8 +4,6 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import javax.imageio.ImageIO;
 
-import fi.vesas.wfc.SimpleWFC.DIR;
-
 public class WfcCli {
 
     public static void main(String[] args) {
@@ -44,22 +42,27 @@ public class WfcCli {
         System.out.println("      --tiling           Enable seamless tiling");
         System.out.println("      --output PATH      Output file or directory (default: output.png)");
         System.out.println();
-        System.out.println("  Tiled model (built-in circuit tileset):");
-        System.out.println("    tiled <tile_dir> [options]");
+        System.out.println("  Tiled model:");
+        System.out.println("    tiled <tileset.json> [options]   tileset definition (ports, weights, images)");
+        System.out.println("    tiled <tile_dir> [options]       built-in circuit rules, images from tile_dir");
         System.out.println();
         System.out.println("    Options:");
         System.out.println("      --size WxH         Grid size in tiles (default: 28x20)");
-        System.out.println("      --tilesize WxH     Tile size in pixels (default: 32x32)");
-        System.out.println("      --basename NAME    Tile file prefix (default: circ)");
+        System.out.println("      --tilesize WxH     Tile size in pixels (default: from tileset, 32x32)");
+        System.out.println("      --basename NAME    Tile file prefix (default: from tileset, circ)");
         System.out.println("      --seed S           Random seed (default: random)");
-        System.out.println("      --count N          Number of images to generate (default: 1)");
+        System.out.println("      --count N          Number of outputs to generate (default: 1)");
         System.out.println("      --tiling           Enable seamless tiling");
         System.out.println("      --output PATH      Output file or directory (default: output.png)");
+        System.out.println("      --format F         png, json, tmx or tmj (default: from --output extension)");
+        System.out.println("                         tmx/tmj = Tiled map editor; json = plain tile grid");
         System.out.println();
         System.out.println("  Examples:");
         System.out.println("    overlapping sample.png --size 64x64 --tiling --output result.png");
         System.out.println("    overlapping sample.png --count 5 --seed 42 --output batch/");
         System.out.println("    tiled assets --basename circ --tiling --seed 229 --output circuit.png");
+        System.out.println("    tiled assets/circuit.json --seed 229 --output maps/circuit.tmx");
+        System.out.println("    tiled assets/circuit.json --count 10 --format tmj --output maps/");
     }
 
     // --- Overlapping mode ---
@@ -169,19 +172,20 @@ public class WfcCli {
 
     private static void runTiled(String[] args) {
         if (args.length < 2) {
-            System.err.println("Error: tile directory required");
+            System.err.println("Error: tile directory or tileset JSON required");
             printUsage();
             return;
         }
 
-        String tileDir = args[1];
+        String source = args[1];
         int gridW = 28, gridH = 20;
-        int tileW = 32, tileH = 32;
-        String basename = "circ";
+        int[] tileSizeOverride = null;
+        String basenameOverride = null;
         long seed = System.nanoTime();
         int count = 1;
         boolean tiling = false;
         String output = "output.png";
+        String format = null;
 
         for (int i = 2; i < args.length; i++) {
             switch (args[i]) {
@@ -190,11 +194,10 @@ public class WfcCli {
                     gridW = wh[0]; gridH = wh[1];
                     break;
                 case "--tilesize":
-                    int[] ts = parseSize(args[++i]);
-                    tileW = ts[0]; tileH = ts[1];
+                    tileSizeOverride = parseSize(args[++i]);
                     break;
                 case "--basename":
-                    basename = args[++i];
+                    basenameOverride = args[++i];
                     break;
                 case "--seed":
                     seed = Long.parseLong(args[++i]);
@@ -208,31 +211,44 @@ public class WfcCli {
                 case "--output":
                     output = args[++i];
                     break;
+                case "--format":
+                    format = args[++i].toLowerCase();
+                    break;
                 default:
                     System.err.println("Unknown option: " + args[i]);
                     return;
             }
         }
 
-        try {
-            // Build circuit constraints (the built-in tileset)
-            Constraints constraints = buildCircuitConstraints();
-            int tileCount = 9;
+        if (format == null) {
+            format = extensionOf(output);
+            if (format == null) format = "png";
+        }
+        if (!format.equals("png") && !format.equals("json") && !format.equals("tmx") && !format.equals("tmj")) {
+            System.err.println("Unknown format: " + format + " (use png, json, tmx or tmj)");
+            return;
+        }
+        if (count == 1 && extensionOf(output) != null && !extensionOf(output).equals(format)) {
+            System.err.println("Error: --output " + output + " does not match --format " + format);
+            return;
+        }
 
-            System.out.println("Tiles: " + tileDir + "/" + basename + "*.png");
-            System.out.println("Grid: " + gridW + "x" + gridH + ", tile: " + tileW + "x" + tileH
-                + ", tiling=" + tiling);
+        try {
+            TilesetDef def = loadTileset(source, basenameOverride, tileSizeOverride);
+
+            System.out.println("Tileset: " + def.name + " (" + def.tileDir + "/" + def.basename + "*.png, "
+                + def.tileCount + " tile IDs" + (def.weights != null ? ", weighted" : "") + ")");
+            System.out.println("Grid: " + gridW + "x" + gridH + ", tile: " + def.tilePixelW + "x" + def.tilePixelH
+                + ", tiling=" + tiling + ", format=" + format);
 
             if (count == 1) {
-                generateTiledSingle(gridW, gridH, tileCount, constraints, tiling,
-                    seed, tileDir, basename, tileW, tileH, output);
+                if (extensionOf(output) == null) output = output + "." + format;
+                generateTiledSingle(def, gridW, gridH, tiling, seed, format, output);
             } else {
                 long[] seeds = BatchRunner.generateSeeds(seed, count);
-                String dir = output.endsWith(".png") ? output.replace(".png", "") : output;
-                BatchRunner.runTiledBatch(gridW, gridH, tileCount, true, true,
-                    tiling, tiling, constraints, tileDir, basename, tileW, tileH,
-                    dir, "output", seeds);
-                System.out.println("Generated " + count + " images in " + dir + "/");
+                String dir = extensionOf(output) != null ? output.substring(0, output.lastIndexOf('.')) : output;
+                int written = BatchRunner.runTiledBatch(def, gridW, gridH, tiling, tiling, dir, "output", format, seeds);
+                System.out.println("Generated " + written + "/" + count + " files in " + dir + "/");
             }
         } catch (Exception e) {
             System.err.println("Error: " + e.getMessage());
@@ -240,16 +256,34 @@ public class WfcCli {
         }
     }
 
-    private static void generateTiledSingle(int gridW, int gridH, int tileCount,
-            Constraints constraints, boolean tiling, long seed,
-            String tileDir, String basename, int tileW, int tileH,
-            String output) throws Exception {
+    /**
+     * A path ending in .json is a tileset definition. Anything else is a tile
+     * directory used with the built-in circuit rules (original behaviour).
+     */
+    static TilesetDef loadTileset(String source, String basenameOverride, int[] tileSizeOverride) {
+        TilesetDef base;
+        File f = new File(source);
+        if (source.toLowerCase().endsWith(".json")) {
+            if (!f.isFile()) throw new IllegalArgumentException("Tileset not found: " + source);
+            base = TilesetDef.loadFromJson(f);
+        } else {
+            TilesetDef c = TilesetDef.circuitTileset();
+            base = c.withImages(f.getPath(), c.basename, c.tilePixelW, c.tilePixelH);
+        }
+        if (basenameOverride == null && tileSizeOverride == null) return base;
+        return base.withImages(base.tileDir,
+                basenameOverride != null ? basenameOverride : base.basename,
+                tileSizeOverride != null ? tileSizeOverride[0] : base.tilePixelW,
+                tileSizeOverride != null ? tileSizeOverride[1] : base.tilePixelH);
+    }
 
-        SimpleWFC wfc = new SimpleWFC(gridW, gridH, tileCount, true, true);
+    private static void generateTiledSingle(TilesetDef def, int gridW, int gridH, boolean tiling,
+            long seed, String format, String output) throws Exception {
+
+        SimpleWFC wfc = def.createSolver(gridW, gridH);
         wfc.setSeed((int) seed);
         wfc.setTilingHorizontal(tiling);
         wfc.setTilingVertical(tiling);
-        wfc.setConstraints(constraints);
 
         System.out.print("Running... ");
         wfc.run();
@@ -261,39 +295,19 @@ public class WfcCli {
 
         System.out.println("done (backtracked " + wfc.getBacktrackCount() + " times)");
 
-        TiledImageExporter.exportToFile(wfc, tileDir, basename, tileW, tileH, output);
-        System.out.println("Saved: " + output + " (" + (gridW * tileW) + "x" + (gridH * tileH) + " pixels)");
+        BatchRunner.writeTiled(wfc, def, format, output);
+        if (format.equals("png")) {
+            System.out.println("Saved: " + output + " (" + (gridW * def.tilePixelW) + "x" + (gridH * def.tilePixelH) + " pixels)");
+        } else {
+            System.out.println("Saved: " + output);
+        }
     }
 
-    private static Constraints buildCircuitConstraints() {
-        Constraints constraints = new Constraints();
-
-        constraints.addPort(1, DIR.S, 1);
-        constraints.addPort(1, DIR.E, 1);
-        constraints.addPort(1, DIR.N, 1);
-        constraints.addPort(1, DIR.W, 1);
-
-        constraints.addPort(2, DIR.S, 1);
-        constraints.addPort(2, DIR.N, 2);
-
-        constraints.addPort(3, DIR.N, 2);
-
-        constraints.addPort(4, DIR.N, 2);
-        constraints.addPort(4, DIR.W, 2);
-
-        constraints.addPort(5, DIR.S, 1);
-
-        constraints.addPort(6, DIR.N, 2);
-        constraints.addPort(6, DIR.W, 2);
-        constraints.addPort(6, DIR.E, 2);
-
-        constraints.addPort(7, DIR.N, 2);
-        constraints.addPort(7, DIR.S, 2);
-
-        constraints.addPort(8, DIR.N, 2);
-        constraints.addPort(8, DIR.S, 2);
-
-        return constraints;
+    /** Lower-case extension without the dot, or null when the last path segment has none. */
+    private static String extensionOf(String path) {
+        String name = new File(path).getName();
+        int dot = name.lastIndexOf('.');
+        return dot > 0 ? name.substring(dot + 1).toLowerCase() : null;
     }
 
     private static int[] parseSize(String s) {

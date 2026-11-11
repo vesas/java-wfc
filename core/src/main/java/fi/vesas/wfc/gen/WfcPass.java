@@ -37,6 +37,7 @@ public class WfcPass implements GenPass {
     private boolean rotationsAllowed = true;
     private boolean tilingHorizontal = false;
     private boolean tilingVertical = false;
+    private double[] weights;
 
     private String controlLayerName;
     private IntFunction<int[]> controlMapper;
@@ -56,6 +57,12 @@ public class WfcPass implements GenPass {
 
     public WfcPass rotationsAllowed(boolean b) {
         this.rotationsAllowed = b;
+        return this;
+    }
+
+    /** Selection weight per tile ID (see {@link SimpleWFC#setWeights(double[])}). null = uniform. */
+    public WfcPass weights(double[] weights) {
+        this.weights = weights;
         return this;
     }
 
@@ -92,6 +99,7 @@ public class WfcPass implements GenPass {
         SimpleWFC wfc = new SimpleWFC(ctx.getWidth(), ctx.getHeight(),
                 tileCount, emptyAllowed, rotationsAllowed);
         wfc.setConstraints(constraints);
+        wfc.setWeights(weights);
         wfc.setSeed(ctx.getRandom().nextInt());
         wfc.setTilingHorizontal(tilingHorizontal);
         wfc.setTilingVertical(tilingVertical);

@@ -1,0 +1,41 @@
+{
+  "name": "Circuit",
+  "basename": "circ",
+  "tileCount": 9,
+  "emptyAllowed": true,
+  "rotationsAllowed": true,
+  "tilePixelW": 32,
+  "tilePixelH": 32,
+  "weights": { "0": 3.0, "1": 0.3 },
+  "tags": {
+    "walkable": [0],
+    "chip": [1],
+    "trace": [2, 3, 4, 5, 6, 7, 8]
+  },
+  "ports": [
+    { "tile": 1, "dir": "N", "port": 1 },
+    { "tile": 1, "dir": "E", "port": 1 },
+    { "tile": 1, "dir": "S", "port": 1 },
+    { "tile": 1, "dir": "W", "port": 1 },
+
+    { "tile": 2, "dir": "S", "port": 1 },
+    { "tile": 2, "dir": "N", "port": 2 },
+
+    { "tile": 3, "dir": "N", "port": 2 },
+
+    { "tile": 4, "dir": "N", "port": 2 },
+    { "tile": 4, "dir": "W", "port": 2 },
+
+    { "tile": 5, "dir": "S", "port": 1 },
+
+    { "tile": 6, "dir": "N", "port": 2 },
+    { "tile": 6, "dir": "W", "port": 2 },
+    { "tile": 6, "dir": "E", "port": 2 },
+
+    { "tile": 7, "dir": "N", "port": 2 },
+    { "tile": 7, "dir": "S", "port": 2 },
+
+    { "tile": 8, "dir": "N", "port": 2 },
+    { "tile": 8, "dir": "S", "port": 2 }
+  ]
+}

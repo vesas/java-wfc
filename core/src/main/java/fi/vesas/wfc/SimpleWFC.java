@@ -236,6 +236,41 @@ public class SimpleWFC {
 
     private Random random = new Random();
 
+    // Per-tile-id selection weights. null = uniform (original behaviour, same RNG sequence).
+    private double[] weights;
+    private double[] weightLogWeights;
+
+    /**
+     * Set relative selection weights, indexed by tile ID. Missing entries
+     * default to 1. A weight of 0 means "only if nothing else fits".
+     * With weights set, cell selection uses Shannon entropy instead of the
+     * candidate count. Pass null to go back to uniform choice.
+     */
+    public void setWeights(double[] weights) {
+        if (weights == null) {
+            this.weights = null;
+            this.weightLogWeights = null;
+            return;
+        }
+        int maxId = 0;
+        for (int[][] col : idGrid) for (int[] cell : col) for (int t : cell) maxId = Math.max(maxId, t);
+        int n = Math.max(maxId + 1, weights.length);
+        this.weights = new double[n];
+        this.weightLogWeights = new double[n];
+        for (int i = 0; i < n; i++) {
+            double w = i < weights.length ? weights[i] : 1.0;
+            if (w < 0 || Double.isNaN(w)) {
+                throw new IllegalArgumentException("Tile " + i + " weight must be >= 0, got " + w);
+            }
+            this.weights[i] = w;
+            this.weightLogWeights[i] = w > 0 ? w * Math.log(w) : 0;
+        }
+    }
+
+    public double[] getWeights() {
+        return weights;
+    }
+
     public int [][][] getRots() {
         return rotationGrid;
     }
@@ -343,6 +378,10 @@ public class SimpleWFC {
      */
     public int findLowEntropy() {
 
+        if (weights != null) {
+            return findLowShannonEntropy();
+        }
+
         int stride = this.width;
 
         int lowestEntropy = 1231231231;
@@ -363,6 +402,53 @@ public class SimpleWFC {
         }
 
         return lowestEntropyPos;
+    }
+
+    // Weighted mode: H = log(sumW) - sum(w log w) / sumW over the cell's candidate tiles.
+    // Collapsed cells (one candidate) are skipped. Zero-weight tiles add nothing to H.
+    private int findLowShannonEntropy() {
+        double lowest = Double.MAX_VALUE;
+        int lowestPos = -1;
+        for (int h = 0; h < this.height; h++) {
+            for (int w = 0; w < this.width; w++) {
+                int[] possibilities = idGrid[w][h];
+                if (possibilities.length <= 1) continue;
+                double sumW = 0, sumWLogW = 0;
+                for (int t : possibilities) {
+                    sumW += weights[t];
+                    sumWLogW += weightLogWeights[t];
+                }
+                double entropy = sumW > 0 ? Math.log(sumW) - sumWLogW / sumW : 0;
+                if (entropy < lowest) {
+                    lowest = entropy;
+                    lowestPos = h * this.width + w;
+                }
+            }
+        }
+        return lowestPos;
+    }
+
+    // Pick an index from choices. Uniform when no weights are set; otherwise weighted
+    // by tile ID, falling back to uniform when every candidate has weight 0.
+    private int pickIndex(List<TileAndRotation> choices) {
+        if (weights == null) {
+            return random.nextInt(choices.size());
+        }
+        double total = 0;
+        for (TileAndRotation c : choices) total += weights[c.tile];
+        if (total <= 0) {
+            return random.nextInt(choices.size());
+        }
+        double roll = random.nextDouble() * total;
+        for (int i = 0; i < choices.size(); i++) {
+            roll -= weights[choices.get(i).tile];
+            if (roll < 0) return i;
+        }
+        // rounding: last candidate with non-zero weight
+        for (int i = choices.size() - 1; i >= 0; i--) {
+            if (weights[choices.get(i).tile] > 0) return i;
+        }
+        return choices.size() - 1;
     }
 
     public void setValuesAt(int x, int y, int ... values)
@@ -1018,7 +1104,7 @@ public class SimpleWFC {
 
         // Pick one choice and collapse
         List<TileAndRotation> choices = new ArrayList<>(allAllowedTiles);
-        int rand = random.nextInt(choices.size());
+        int rand = pickIndex(choices);
         TileAndRotation chosen = choices.get(rand);
 
         // Remove the chosen option from the snapshot so we don't retry it
@@ -1074,7 +1160,7 @@ public class SimpleWFC {
             backtrackCount++;
 
             // Pick a different choice
-            int rand = random.nextInt(snapshot.remainingChoices.size());
+            int rand = pickIndex(snapshot.remainingChoices);
             TileAndRotation chosen = snapshot.remainingChoices.remove(rand);
 
             collapseCell(snapshot.x, snapshot.y, chosen);

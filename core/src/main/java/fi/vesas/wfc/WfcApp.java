@@ -627,6 +627,7 @@ public class WfcApp extends ApplicationAdapter {
         tiledWfc.setTilingHorizontal(tilingHCheck.isChecked());
         tiledWfc.setTilingVertical(tilingVCheck.isChecked());
         tiledWfc.setConstraints(currentTileset.constraints);
+        tiledWfc.setWeights(currentTileset.weights);
 
         tilePixelW = currentTileset.tilePixelW;
         tilePixelH = currentTileset.tilePixelH;
@@ -751,17 +752,41 @@ public class WfcApp extends ApplicationAdapter {
         new Thread(() -> {
             JFileChooser chooser = new JFileChooser(lastExportDir != null ? lastExportDir : new File(System.getProperty("user.dir")));
             chooser.setDialogTitle("Save WFC Output");
-            chooser.setFileFilter(new FileNameExtensionFilter("PNG images", "png"));
+            FileNameExtensionFilter pngFilter = new FileNameExtensionFilter("PNG image (*.png)", "png");
+            FileNameExtensionFilter tmxFilter = new FileNameExtensionFilter("Tiled map (*.tmx)", "tmx");
+            FileNameExtensionFilter tmjFilter = new FileNameExtensionFilter("Tiled map JSON (*.tmj)", "tmj");
+            FileNameExtensionFilter jsonFilter = new FileNameExtensionFilter("Tile grid JSON (*.json)", "json");
+            chooser.setAcceptAllFileFilterUsed(false);
+            chooser.addChoosableFileFilter(pngFilter);
+            if (tiledMode) {
+                chooser.addChoosableFileFilter(tmxFilter);
+                chooser.addChoosableFileFilter(tmjFilter);
+                chooser.addChoosableFileFilter(jsonFilter);
+            }
+            chooser.setFileFilter(pngFilter);
             chooser.setSelectedFile(new File(defaultName));
             if (chooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) {
                 File selected = chooser.getSelectedFile();
                 String path = selected.getAbsolutePath();
-                if (!path.toLowerCase().endsWith(".png")) path += ".png";
+                String lower = path.toLowerCase();
+                String filterExt = "png";
+                if (chooser.getFileFilter() instanceof FileNameExtensionFilter) {
+                    filterExt = ((FileNameExtensionFilter) chooser.getFileFilter()).getExtensions()[0];
+                }
+                boolean mapExt = tiledMode && TileMapExporter.isMapFormat(lower);
+                if (lower.endsWith(".png") && !filterExt.equals("png")) {
+                    // default name ends in .png; the chosen filter decides the format
+                    path = path.substring(0, path.length() - 4) + "." + filterExt;
+                } else if (!lower.endsWith(".png") && !mapExt) {
+                    path += "." + filterExt;
+                }
                 lastExportDir = selected.getParentFile();
                 final String exportPath = path;
                 Gdx.app.postRunnable(() -> {
                     try {
-                        if (tiledMode) {
+                        if (tiledMode && TileMapExporter.isMapFormat(exportPath)) {
+                            TileMapExporter.exportToFile(tiledWfc, currentTileset, exportPath);
+                        } else if (tiledMode) {
                             String tileDir = currentTileset.tileDir != null ? currentTileset.tileDir : ".";
                             TiledImageExporter.exportToFile(tiledWfc, tileDir,
                                     currentTileset.basename, tilePixelW, tilePixelH, exportPath);
